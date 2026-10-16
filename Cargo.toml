@@ -27,3 +27,7 @@ keyring = "4"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
+
+# Debug builds of the GUI stack (text layout, rendering) are very slow unless optimized.
+[profile.dev.package."*"]
+opt-level = 3

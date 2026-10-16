@@ -304,6 +304,8 @@ pub struct App {
     pub tracker_query: String,
     pub plugin_dialog: Option<PluginDialog>,
     pub motion: motion::Motion,
+    /// The last click on a torrent row, to recognise a double click.
+    pub last_click: Option<(usize, std::time::Instant)>,
 }
 
 #[derive(Clone)]
@@ -510,6 +512,7 @@ impl App {
             tracker_query: String::new(),
             plugin_dialog: None,
             motion: motion::Motion::new(),
+            last_click: None,
         };
         (
             app,
@@ -660,7 +663,19 @@ impl App {
                 self.view = View::Torrents;
             }
             Msg::ShowView(v) => self.view = v,
-            Msg::Select(id) => self.select(id),
+            Msg::Select(id) => {
+                self.select(id);
+                let now = std::time::Instant::now();
+                let double = self.last_click.is_some_and(|(last, at)| last == id && now.duration_since(at) < Duration::from_millis(400));
+                if double && !input::ctrl() && !input::shift() {
+                    self.last_click = None;
+                    if let Some(t) = self.snap.torrents.iter().find(|t| t.id == id) {
+                        open_target(&t.folder);
+                    }
+                } else {
+                    self.last_click = Some((id, now));
+                }
+            }
             Msg::ContextMenu(id) => {
                 if !self.multi.contains(&id) {
                     self.multi = BTreeSet::from([id]);
