@@ -4,7 +4,7 @@ use crate::theme::{self, Mode, Palette};
 use crate::i18n::{Language, plural, tr, trf};
 use crate::widgets::*;
 use crate::{
-    AddMode, App, CatChoice, CategoryFilter, DetailTab, Dialog, Filter, Msg, PieceSize, SettingsTab, SortKey, View, fmt, input, lines,
+    AddMode, App, CatChoice, CategoryFilter, DetailTab, Dialog, Filter, Msg, PieceSize, SettingsTab, SortKey, View, fmt, geo, input, lines,
 };
 use iced::widget::{
     Space, button, column, container, mouse_area, pick_list, progress_bar, row, scrollable, stack,
@@ -113,6 +113,21 @@ fn resize_grips<'a>() -> Vec<El<'a>> {
 
 fn note_top<'a>(p: Palette, text: String) -> El<'a> {
     container(tx(text, 14.0, p.mute)).width(GROW).center_x(GROW).padding([40, 16]).into()
+}
+
+const FLAG_W: f32 = 20.0;
+
+/// Country flag for a peer address; blank space of the same width when the country is unknown.
+fn flag_cell<'a>(addr: &str) -> El<'a> {
+    match geo::country(addr).and_then(|cc| geo::flag(cc).map(|h| (cc, h))) {
+        Some((cc, h)) => iced::widget::tooltip(
+            iced::widget::image(h.clone()).width(FLAG_W).height(FLAG_W * 0.75),
+            container(mono(String::from_utf8_lossy(&cc).into_owned(), 12.0, Color::WHITE)).padding([2, 6]).style(container::dark),
+            iced::widget::tooltip::Position::Right,
+        )
+        .into(),
+        None => Space::new().width(FLAG_W).into(),
+    }
 }
 
 fn peer_state(raw: &str) -> String {
@@ -740,6 +755,7 @@ impl App {
     fn peers_tab<'a>(&'a self, p: Palette, d: Option<&'a Detail>) -> El<'a> {
         let head = |s: String| tx(s.to_uppercase(), 11.0, p.faint);
         let header = row![
+            Space::new().width(FLAG_W),
             head(tr("peers.address")).width(Length::FillPortion(12)),
             head(tr("peers.client")).width(Length::FillPortion(12)),
             head(tr("peers.state")).width(100),
@@ -753,6 +769,7 @@ impl App {
         let peers = d.map(|d| d.peers.as_slice()).unwrap_or_default();
         let rows = peers.iter().map(|x| {
             row![
+                flag_cell(&x.addr),
                 mono(x.addr.clone(), 12.0, p.txt).width(Length::FillPortion(12)),
                 tx(x.client.clone(), 13.0, p.txt).width(Length::FillPortion(12)),
                 tx(peer_state(&x.state), 12.0, p.txt2).width(100),

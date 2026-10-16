@@ -6,6 +6,7 @@ mod autostart;
 mod categories;
 mod engine;
 mod fmt;
+mod geo;
 mod i18n;
 mod notify;
 mod platform;

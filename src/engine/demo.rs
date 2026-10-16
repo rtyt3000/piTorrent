@@ -91,7 +91,7 @@ impl Backend for DemoBackend {
                 })
                 .collect();
             let peers = if want_peers && t.peers > 0 {
-                [("203.0.113.24:51413", "qBittorrent 5.1"), ("198.51.100.7:6881", "Transmission 4.1"), ("192.0.2.150:6881", "Deluge 2.2")]
+                [("77.88.8.8:51413", "qBittorrent 5.1"), ("5.9.0.1:6881", "Transmission 4.1"), ("8.8.8.8:6881", "Deluge 2.2")]
                     .iter()
                     .enumerate()
                     .map(|(i, (addr, client))| PeerInfo {
