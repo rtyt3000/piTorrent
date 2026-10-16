@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 const DIALOG: Duration = Duration::from_millis(240);
 /// Matches the polling interval, so a bar is always moving towards the next sample.
 const BAR: Duration = Duration::from_millis(1000);
-const PAGE: Duration = Duration::from_millis(320);
-const TAB: Duration = Duration::from_millis(260);
+const PAGE: Duration = Duration::from_millis(240);
+const TAB: Duration = Duration::from_millis(200);
 const PULSE_PERIOD: f32 = 1.4;
 
 pub struct Motion {
@@ -105,6 +105,5 @@ impl Motion {
 
 fn progress(since: Option<Instant>, duration: Duration) -> f32 {
     let x = since.map_or(1.0, |s| (s.elapsed().as_secs_f32() / duration.as_secs_f32()).min(1.0));
-    // Smooth at both ends: an abrupt start reads as a flicker.
-    0.5 - 0.5 * (x * std::f32::consts::PI).cos()
+    1.0 - (1.0 - x).powi(3)
 }
