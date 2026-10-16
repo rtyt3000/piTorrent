@@ -18,7 +18,6 @@ const BUNDLED: &[(&str, &str)] = &[
     ("bitsearch.js", include_str!("../../assets/plugins/bitsearch.js")),
     ("nyaa.js", include_str!("../../assets/plugins/nyaa.js")),
     ("rutor.js", include_str!("../../assets/plugins/rutor.js")),
-    ("rutracker.js", include_str!("../../assets/plugins/rutracker.js")),
     ("example.js", include_str!("../../assets/plugins/example.js")),
 ];
 
@@ -30,7 +29,6 @@ const BUNDLED_ICONS: &[(&str, &[u8])] = &[
     ("bitsearch", include_bytes!("../../assets/plugins/icons/bitsearch.png")),
     ("nyaa", include_bytes!("../../assets/plugins/icons/nyaa.png")),
     ("rutor", include_bytes!("../../assets/plugins/icons/rutor.png")),
-    ("rutracker", include_bytes!("../../assets/plugins/icons/rutracker.png")),
 ];
 
 const MAX_ICON_BYTES: usize = 64 << 10;

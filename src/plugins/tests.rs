@@ -376,7 +376,7 @@ fn bundled_plugins_load_and_can_be_installed_and_removed() {
     let mut m = Manager::load(dir.join("plugins"), store);
     assert!(m.failed.is_empty(), "{:?}", m.failed);
     let ids: Vec<_> = m.plugins.iter().map(|p| p.meta.id.as_str()).collect();
-    assert_eq!(ids, ["torznab", "internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa", "rutor", "rutracker", "example"]);
+    assert_eq!(ids, ["torznab", "internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa", "rutor", "example"]);
     for p in &m.plugins {
         let has_icon = !matches!(p.meta.id.as_str(), "torznab" | "torrents-csv" | "example");
         assert_eq!(p.icon.is_some(), has_icon, "icon of {}", p.meta.id);
@@ -553,32 +553,4 @@ fn rutor_page_is_parsed() {
     assert!(first.date.as_deref().is_some_and(|d| d.starts_with("2026-")), "{first:?}");
     assert!(first.page_url.as_deref().unwrap().contains("/torrent/"));
     assert!(mock.requests()[0].starts_with("GET /search/0/0/000/2/ubuntu"));
-}
-
-/// RuTracker cannot be reached from the test, so this runs the plugin against a page written
-/// from what the site is known to look like: login, search, then downloading the .torrent.
-#[test]
-fn rutracker_logs_in_searches_and_resolves() {
-    let results = "<table><tr id=\"trs-tr-555\" class=\"tCenter hl-tr\"><td class=\"f-name-col\"><a class=\"gen f\" href=\"tracker.php?f=1\">Linux</a></td>        <td class=\"t-title-col\"><a data-topic_id=\"555\" class=\"tLink\" href=\"viewtopic.php?t=555\">Ubuntu 24.04</a></td>        <td class=\"tor-size\" data-ts_text=\"6000000000\"><a class=\"tr-dl\">5.6 GB</a></td>        <td class=\"seedmed\" data-ts_text=\"12\"><b>12</b></td><td class=\"leechmed\">3</td>        <td data-ts_text=\"1700000000\">added</td></tr></table>        <a href=\"tracker.php?search_id=xyz&amp;start=50\">2</a>";
-    let torrent = response("200 OK", &["Content-Type: application/x-bittorrent"], b"d4:infod4:name1:xee");
-    let mock = Mock::new(vec![
-        ("/forum/login.php", response("200 OK", &["Content-Type: text/html", "Set-Cookie: bb_session=abc; Path=/"], b"<html>welcome</html>")),
-        ("/forum/tracker.php", ok(results.as_bytes(), "text/html; charset=windows-1251")),
-        ("/forum/dl.php", torrent),
-    ]);
-    let p = plugin(include_str!("../../assets/plugins/rutracker.js"));
-    let cfg = settings(&[("baseUrl", &mock.url()), ("username", "me"), ("password", "pw")]);
-    let r = p.search(cfg.clone(), "ubuntu", None, cancel()).unwrap();
-    // The mock answers the second page with the same table.
-    assert_eq!(r.len(), 2);
-    assert_eq!((r[0].title.as_str(), r[0].size, r[0].seeders, r[0].leechers), ("Ubuntu 24.04", Some(6_000_000_000), Some(12), Some(3)));
-    assert_eq!(r[0].date.as_deref(), Some("2023-11-14"));
-    assert!(r[0].page_url.as_deref().unwrap().ends_with("viewtopic.php?t=555"));
-    let seen = mock.requests();
-    assert!(seen[0].starts_with("POST /forum/login.php"), "login comes first: {}", seen[0]);
-
-    let resolved = p.resolve(cfg, &r[0], cancel()).unwrap();
-    assert!(resolved.torrent_base64.is_some());
-    assert!(mock.requests().iter().any(|q| q.starts_with("GET /forum/dl.php?t=555")));
-    assert!(mock.requests().iter().any(|q| q.starts_with("GET /forum/tracker.php?search_id=xyz&start=50")));
 }
