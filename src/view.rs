@@ -211,12 +211,7 @@ impl App {
     }
 
     fn header(&self, p: Palette) -> El<'_> {
-        let logo = container(icon(Ico::Logo, 14.0, p.acc_ink))
-            .width(24)
-            .height(24)
-            .center_x(24)
-            .center_y(24)
-            .style(theme::fill(p.acc, 7.0));
+        let logo = iced::widget::image(crate::app_icon::handle()).width(24).height(24);
         let search = stack![
             text_input(
                 &tr(if self.view == View::Search { "search.placeholder_trackers" } else { "search.placeholder" }),
