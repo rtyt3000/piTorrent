@@ -35,39 +35,39 @@ definePlugin({
   search: function (ctx, query) {
     var s = session(ctx);
     var out = [];
-    // 50 results per page; the site limits how often it can be searched.
-    for (var page = 0; page < 2; page++) {
-      var url = s.base + "/forum/tracker.php?" + new URLSearchParams({ nm: query, o: 10, s: 2, start: page * 50 }).toString();
-      var r = fetchPage(ctx, s, url);
-      var rows = ctx.html.parse(r.text).select("tr.hl-tr");
-      rows.forEach(function (row) {
-        var link = row.first("a.tLink");
+    // The first request creates a search on the site; the other pages are reached through the
+    // page links it returns (they carry the search id), at most 3 pages to be polite.
+    var url = s.base + "/forum/tracker.php?" + new URLSearchParams({ nm: query }).toString();
+    var seen = {};
+    for (var page = 0; page < 3 && url; page++) {
+      var doc = ctx.html.parse(fetchPage(ctx, s, url).text);
+      doc.select("tr[id^='trs-tr-']").forEach(function (row) {
+        var link = row.first("a[data-topic_id]");
         if (!link) return;
-        var id = link.attr("data-topic_id") || (/t=(\d+)/.exec(link.attr("href") || "") || [])[1];
-        if (!id) return;
-        var sizeCell = row.first("td.tor-size");
-        var size = sizeCell && sizeCell.attr("data-ts_text") ? Number(sizeCell.attr("data-ts_text")) : null;
-        if (!size && row.first("a.tr-dl")) size = ctx.util.sizeToBytes(row.first("a.tr-dl").text());
-        var seeders = row.first("td.seedmed, b.seedmed");
-        var leechers = row.first("td.leechmed, b.leechmed");
+        var id = link.attr("data-topic_id");
+        // data-ts_text holds raw values, in this order: size, seeders, added (unix time).
+        var raw = row.select("[data-ts_text]").map(function (el) { return el.attr("data-ts_text"); });
+        var leech = row.first(".leechmed");
         var forum = row.first("a.f");
-        var date = null;
-        row.select("td[data-ts_text]").forEach(function (td) {
-          var v = td.attr("data-ts_text");
-          if (/^\d{10}$/.test(v)) date = new Date(Number(v) * 1000).toISOString().slice(0, 10);
-        });
         out.push({
           title: link.text(),
-          size: size,
-          seeders: seeders ? ctx.util.number(seeders.text()) : null,
-          leechers: leechers ? ctx.util.number(leechers.text()) : null,
-          date: date,
+          size: raw[0] ? Number(raw[0]) : null,
+          // Negative when the release is not available for download.
+          seeders: raw[1] ? Math.max(0, Number(raw[1])) : null,
+          leechers: leech ? ctx.util.number(leech.text()) : null,
+          date: /^\d{10}$/.test(raw[2] || "") ? new Date(Number(raw[2]) * 1000).toISOString().slice(0, 10) : null,
           // The .torrent needs the session, so resolve() downloads it.
           pageUrl: s.base + "/forum/viewtopic.php?t=" + id,
           category: forum ? forum.text() : null,
         });
       });
-      if (rows.length < 50) break;
+      seen[url] = true;
+      url = null;
+      doc.select("a[href^='tracker.php?']").forEach(function (a) {
+        var href = a.attr("href");
+        var next = s.base + "/forum/" + href.replace(/&amp;/g, "&");
+        if (!url && /[?&]start=\d+/.test(href) && !seen[next]) url = next;
+      });
     }
     return out;
   },

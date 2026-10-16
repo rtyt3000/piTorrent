@@ -559,7 +559,7 @@ fn rutor_page_is_parsed() {
 /// from what the site is known to look like: login, search, then downloading the .torrent.
 #[test]
 fn rutracker_logs_in_searches_and_resolves() {
-    let results = "<table><tr class=\"tCenter hl-tr\"><td class=\"f-name-col\"><a class=\"gen f\" href=\"tracker.php?f=1\">Linux</a></td>        <td class=\"t-title-col\"><a class=\"tLink\" data-topic_id=\"555\" href=\"viewtopic.php?t=555\">Ubuntu 24.04</a></td>        <td class=\"tor-size\" data-ts_text=\"6000000000\"><a class=\"tr-dl\">5.6 GB</a></td>        <td class=\"seedmed\"><b>12</b></td><td class=\"leechmed\">3</td>        <td data-ts_text=\"1700000000\">added</td></tr></table>";
+    let results = "<table><tr id=\"trs-tr-555\" class=\"tCenter hl-tr\"><td class=\"f-name-col\"><a class=\"gen f\" href=\"tracker.php?f=1\">Linux</a></td>        <td class=\"t-title-col\"><a data-topic_id=\"555\" class=\"tLink\" href=\"viewtopic.php?t=555\">Ubuntu 24.04</a></td>        <td class=\"tor-size\" data-ts_text=\"6000000000\"><a class=\"tr-dl\">5.6 GB</a></td>        <td class=\"seedmed\" data-ts_text=\"12\"><b>12</b></td><td class=\"leechmed\">3</td>        <td data-ts_text=\"1700000000\">added</td></tr></table>        <a href=\"tracker.php?search_id=xyz&amp;start=50\">2</a>";
     let torrent = response("200 OK", &["Content-Type: application/x-bittorrent"], b"d4:infod4:name1:xee");
     let mock = Mock::new(vec![
         ("/forum/login.php", response("200 OK", &["Content-Type: text/html", "Set-Cookie: bb_session=abc; Path=/"], b"<html>welcome</html>")),
@@ -569,7 +569,8 @@ fn rutracker_logs_in_searches_and_resolves() {
     let p = plugin(include_str!("../../assets/plugins/rutracker.js"));
     let cfg = settings(&[("baseUrl", &mock.url()), ("username", "me"), ("password", "pw")]);
     let r = p.search(cfg.clone(), "ubuntu", None, cancel()).unwrap();
-    assert_eq!(r.len(), 1);
+    // The mock answers the second page with the same table.
+    assert_eq!(r.len(), 2);
     assert_eq!((r[0].title.as_str(), r[0].size, r[0].seeders, r[0].leechers), ("Ubuntu 24.04", Some(6_000_000_000), Some(12), Some(3)));
     assert_eq!(r[0].date.as_deref(), Some("2023-11-14"));
     assert!(r[0].page_url.as_deref().unwrap().ends_with("viewtopic.php?t=555"));
@@ -579,4 +580,5 @@ fn rutracker_logs_in_searches_and_resolves() {
     let resolved = p.resolve(cfg, &r[0], cancel()).unwrap();
     assert!(resolved.torrent_base64.is_some());
     assert!(mock.requests().iter().any(|q| q.starts_with("GET /forum/dl.php?t=555")));
+    assert!(mock.requests().iter().any(|q| q.starts_with("GET /forum/tracker.php?search_id=xyz&start=50")));
 }
