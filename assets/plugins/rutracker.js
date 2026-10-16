@@ -8,8 +8,8 @@ definePlugin({
   name: "RuTracker",
   version: "1.0.0",
   description: {
-    en: "The largest Russian tracker. Needs an account.",
-    ru: "Крупнейший русскоязычный трекер. Нужна учётная запись.",
+    en: "The largest Russian tracker. Needs an account. Since July 2026 the site is behind a Cloudflare check, so you will most likely need to paste your browser's cookies.",
+    ru: "Крупнейший русскоязычный трекер. Нужна учётная запись. С июля 2026 сайт закрыт проверкой Cloudflare, поэтому, скорее всего, придётся вставить cookie из браузера.",
   },
   author: "piTorrent",
   hosts: ["$setting:baseUrl"],
@@ -19,6 +19,9 @@ definePlugin({
       help: { en: "A mirror can be used, e.g. https://rutracker.net", ru: "Можно указать зеркало, например https://rutracker.net" } },
     { key: "username", label: { en: "Login", ru: "Логин" }, type: "text", required: true },
     { key: "password", label: { en: "Password", ru: "Пароль" }, type: "password", required: true },
+    { key: "userAgent", label: "User-Agent", type: "text",
+      help: { en: "Optional. Paste your browser's User-Agent when you use its cookies: Cloudflare ties them together.",
+              ru: "Необязательно. Вставьте User-Agent браузера, если используете его cookie: Cloudflare связывает их." } },
     { key: "cookie", label: "Cookie", type: "cookie",
       help: { en: "Optional. For example: bb_session=...; cf_clearance=... Used instead of the login when set.",
               ru: "Необязательно. Например: bb_session=...; cf_clearance=... Если задано, вход по логину не выполняется." } },
@@ -27,7 +30,7 @@ definePlugin({
   check: function (ctx) {
     var s = session(ctx);
     var r = ctx.http.get(s.base + "/forum/tracker.php", { headers: s.headers, encoding: "windows-1251" });
-    if (!r.ok) throw new Error("the site answered " + r.status);
+    if (!r.ok) throw refused(r);
     if (isLoginPage(r.text)) throw new Error("not signed in: check the login, the password or the cookie");
     return "Signed in";
   },
@@ -80,17 +83,27 @@ definePlugin({
     fetchPage(ctx, s, s.base + "/forum/tracker.php");
     var headers = Object.assign({ Referer: result.pageUrl }, s.headers);
     var r = ctx.http.request({ url: s.base + "/forum/dl.php?t=" + id[1], method: "GET", headers: headers, binary: true });
-    if (!r.ok) throw new Error("the site answered " + r.status);
+    if (!r.ok) throw refused(r);
     return { torrentBase64: r.base64 };
   },
 });
 
-var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
+var BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
 function session(ctx) {
-  var headers = { "User-Agent": UA };
+  // Without a cookie the plain login is used, like qBittorrent's plugin does: with an empty
+  // User-Agent (a browser-like one together with a non-browser connection looks suspicious).
+  var headers = { "User-Agent": ctx.settings.userAgent || (ctx.settings.cookie ? BROWSER_UA : "") };
   if (ctx.settings.cookie) headers.Cookie = ctx.settings.cookie;
   return { base: String(ctx.settings.baseUrl || "https://rutracker.org").replace(/\/+$/, ""), headers: headers, cookie: !!ctx.settings.cookie };
+}
+
+function refused(r) {
+  return new Error(
+    r.status === 403
+      ? "the site refused the request (403), most likely a Cloudflare check: copy the cookies and the User-Agent from a browser into the settings"
+      : "the site answered " + r.status
+  );
 }
 
 function isLoginPage(text) {
@@ -103,7 +116,7 @@ function login(ctx, s) {
     { login_username: ctx.settings.username, login_password: ctx.settings.password, login: "Вход" },
     { headers: s.headers, encoding: "windows-1251" }
   );
-  if (!r.ok) throw new Error("the site answered " + r.status);
+  if (!r.ok) throw refused(r);
   if (isLoginPage(r.text)) throw new Error("the login or the password was not accepted (or a captcha is required: use the cookie instead)");
   ctx.state.set("loggedIn", true);
 }
@@ -116,7 +129,7 @@ function fetchPage(ctx, s, url) {
     login(ctx, s);
     r = ctx.http.get(url, { headers: s.headers, encoding: "windows-1251" });
   }
-  if (!r.ok) throw new Error("the site answered " + r.status);
+  if (!r.ok) throw refused(r);
   if (isLoginPage(r.text)) throw new Error("not signed in: check the login, the password or the cookie");
   return r;
 }

@@ -9,7 +9,8 @@ definePlugin({
     ru: "Поисковик по торрентам, бывший SolidTorrents (без входа).",
   },
   author: "piTorrent",
-  hosts: ["solidtorrents.to", "bitsearch.to"],
+  // The site keeps moving: solidtorrents.to -> bitsearch.to -> bitsearch.eu.
+  hosts: ["solidtorrents.to", "bitsearch.to", "bitsearch.eu"],
   categories: ["music", "books"],
   settings: [],
 
@@ -26,6 +27,9 @@ definePlugin({
         if (page > 1) break;
         throw new Error("solidtorrents.to answered " + r.status);
       }
+      // Follow the site to wherever it has moved.
+      var origin = /^https?:\/\/[^\/]+/.exec(r.url || "");
+      if (origin) base = origin[0];
       var cards = ctx.html.parse(r.text).select(".torrent-result-card");
       cards.forEach(function (card) {
         var a = card.first("h3 a");

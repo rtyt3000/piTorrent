@@ -527,7 +527,7 @@ fn bitsearch_page_is_parsed() {
     let mock = Mock::new(vec![("/search", ok(page, "text/html"))]);
     let src = include_str!("../../assets/plugins/bitsearch.js")
         .replace("https://solidtorrents.to", &mock.url())
-        .replace("[\"solidtorrents.to\", \"bitsearch.to\"]", "[\"127.0.0.1\"]");
+        .replace("[\"solidtorrents.to\", \"bitsearch.to\", \"bitsearch.eu\"]", "[\"127.0.0.1\"]");
     let r = plugin(&src).search(Values::new(), "ubuntu", None, cancel()).unwrap();
     assert!(!r.is_empty());
     let first = &r[0];
