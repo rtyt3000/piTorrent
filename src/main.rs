@@ -64,11 +64,13 @@ fn view_window(app: &App, _window: window::Id) -> view::El<'_> {
     app.view()
 }
 
-fn window_settings() -> window::Settings {
+fn window_settings(saved: Option<settings::WindowGeometry>) -> window::Settings {
+    // Remembered place, unless it looks like it would be off every screen.
+    let saved = saved.filter(|g| g.x > -(g.width / 2.0) && g.y >= 0.0 && g.x < 7680.0 && g.y < 4320.0);
     window::Settings {
-        size: Size::new(1280.0, 820.0),
+        size: saved.map_or(Size::new(1280.0, 820.0), |g| Size::new(g.width, g.height)),
         min_size: Some(Size::new(960.0, 600.0)),
-        position: window::Position::Centered,
+        position: saved.map_or(window::Position::Centered, |g| window::Position::Specific(iced::Point::new(g.x, g.y))),
         exit_on_close_request: false,
         decorations: false,
         icon: window::icon::from_rgba(app_icon::rgba(), app_icon::SIZE, app_icon::SIZE).ok(),
@@ -550,7 +552,7 @@ impl App {
     }
 
     fn open_window(&mut self) -> Task<Msg> {
-        let (id, open) = window::open(window_settings());
+        let (id, open) = window::open(window_settings(self.settings.window));
         self.window = Some(id);
         self.motion.hidden = false;
         open.map(Msg::WindowOpened)
@@ -1057,6 +1059,8 @@ impl App {
             Msg::CloseRequested(id) => {
                 return if self.settings.close_to_tray && self.tray.is_some() {
                     // Really close the window: the renderer and the GPU memory go with it.
+                    self.settings.window = input::geometry().or(self.settings.window);
+                    self.settings.save();
                     self.window = None;
                     self.motion.hidden = true;
                     self.last_trim = None;
@@ -1347,6 +1351,11 @@ impl App {
     }
 
     fn quit(&self) -> Task<Msg> {
+        if self.window.is_some() {
+            let mut s = self.settings.clone();
+            s.window = input::geometry().or(s.window);
+            s.save();
+        }
         match self.engine.clone() {
             Some(e) => Task::future(async move { e.shutdown().await }).then(|_| iced::exit()),
             None => iced::exit(),

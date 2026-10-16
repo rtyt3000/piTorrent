@@ -3,6 +3,15 @@ use crate::theme::Mode;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// Where the window was when it was last closed (logical pixels).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WindowGeometry {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -20,6 +29,7 @@ pub struct Settings {
     pub max_seeds: u32,
     pub down_limit: u32,
     pub up_limit: u32,
+    pub window: Option<WindowGeometry>,
 }
 
 impl Default for Settings {
@@ -41,6 +51,7 @@ impl Default for Settings {
             max_seeds: 5,
             down_limit: 0,
             up_limit: 0,
+            window: None,
         }
     }
 }
