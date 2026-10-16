@@ -17,6 +17,8 @@ const BUNDLED: &[(&str, &str)] = &[
     ("limetorrents.js", include_str!("../../assets/plugins/limetorrents.js")),
     ("bitsearch.js", include_str!("../../assets/plugins/bitsearch.js")),
     ("nyaa.js", include_str!("../../assets/plugins/nyaa.js")),
+    ("rutor.js", include_str!("../../assets/plugins/rutor.js")),
+    ("rutracker.js", include_str!("../../assets/plugins/rutracker.js")),
     ("example.js", include_str!("../../assets/plugins/example.js")),
 ];
 

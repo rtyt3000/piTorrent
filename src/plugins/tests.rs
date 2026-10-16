@@ -376,10 +376,10 @@ fn bundled_plugins_load_and_can_be_installed_and_removed() {
     let mut m = Manager::load(dir.join("plugins"), store);
     assert!(m.failed.is_empty(), "{:?}", m.failed);
     let ids: Vec<_> = m.plugins.iter().map(|p| p.meta.id.as_str()).collect();
-    assert_eq!(ids, ["torznab", "internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa", "example"]);
+    assert_eq!(ids, ["torznab", "internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa", "rutor", "rutracker", "example"]);
     // Only plugins that need nothing are searchable out of the box.
     let searchable: Vec<_> = m.searchable().iter().map(|p| p.meta.id.clone()).collect();
-    assert_eq!(searchable, ["internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa"]);
+    assert_eq!(searchable, ["internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa", "rutor"]);
 
     let file = dir.join("mine.js");
     std::fs::write(&file, "definePlugin({ id: 'mine', name: 'Mine', search: function () { return []; } });").unwrap();
@@ -502,6 +502,7 @@ fn live_bundled_searches() {
         ("limetorrents", include_str!("../../assets/plugins/limetorrents.js")),
         ("bitsearch", include_str!("../../assets/plugins/bitsearch.js")),
         ("nyaa", include_str!("../../assets/plugins/nyaa.js")),
+        ("rutor", include_str!("../../assets/plugins/rutor.js")),
     ] {
         match plugin(src).search(Values::new(), "ubuntu", None, cancel()) {
             Ok(r) if !r.is_empty() => {
@@ -530,4 +531,48 @@ fn bitsearch_page_is_parsed() {
     assert!(first.size.is_some() && first.seeders.is_some() && first.leechers.is_some(), "{first:?}");
     assert!(first.magnet.as_deref().is_some_and(|m| m.starts_with("magnet:?xt=urn:btih:")), "{first:?}");
     assert!(first.date.as_deref().is_some_and(|d| d.len() == 10), "{first:?}");
+}
+
+#[test]
+fn rutor_page_is_parsed() {
+    let page = include_bytes!("fixtures/rutor.html");
+    let mock = Mock::new(vec![("/search/", ok(page, "text/html"))]);
+    let src = include_str!("../../assets/plugins/rutor.js").replace("[\"rutor.info\", \"rutor.is\", \"rutor.org\"]", "[\"127.0.0.1\"]");
+    let r = plugin(&src).search(settings(&[("baseUrl", &mock.url())]), "ubuntu", None, cancel()).unwrap();
+    assert_eq!(r.len(), 4);
+    assert!(r.iter().all(|x| x.size.is_some_and(|s| s > 1_000_000)), "{r:?}");
+    let first = &r[0];
+    assert!(first.title.starts_with("Ubuntu"), "{first:?}");
+    assert!(first.size.unwrap() > 4_000_000_000);
+    assert_eq!((first.seeders, first.leechers), (Some(0), Some(1)));
+    assert!(first.magnet.as_deref().unwrap().contains("dn=Ubuntu"), "{first:?}");
+    assert!(first.date.as_deref().is_some_and(|d| d.starts_with("2026-")), "{first:?}");
+    assert!(first.page_url.as_deref().unwrap().contains("/torrent/"));
+    assert!(mock.requests()[0].starts_with("GET /search/0/0/000/2/ubuntu"));
+}
+
+/// RuTracker cannot be reached from the test, so this runs the plugin against a page written
+/// from what the site is known to look like: login, search, then downloading the .torrent.
+#[test]
+fn rutracker_logs_in_searches_and_resolves() {
+    let results = "<table><tr class=\"tCenter hl-tr\"><td class=\"f-name-col\"><a class=\"gen f\" href=\"tracker.php?f=1\">Linux</a></td>        <td class=\"t-title-col\"><a class=\"tLink\" data-topic_id=\"555\" href=\"viewtopic.php?t=555\">Ubuntu 24.04</a></td>        <td class=\"tor-size\" data-ts_text=\"6000000000\"><a class=\"tr-dl\">5.6 GB</a></td>        <td class=\"seedmed\"><b>12</b></td><td class=\"leechmed\">3</td>        <td data-ts_text=\"1700000000\">added</td></tr></table>";
+    let torrent = response("200 OK", &["Content-Type: application/x-bittorrent"], b"d4:infod4:name1:xee");
+    let mock = Mock::new(vec![
+        ("/forum/login.php", response("200 OK", &["Content-Type: text/html", "Set-Cookie: bb_session=abc; Path=/"], b"<html>welcome</html>")),
+        ("/forum/tracker.php", ok(results.as_bytes(), "text/html; charset=windows-1251")),
+        ("/forum/dl.php", torrent),
+    ]);
+    let p = plugin(include_str!("../../assets/plugins/rutracker.js"));
+    let cfg = settings(&[("baseUrl", &mock.url()), ("username", "me"), ("password", "pw")]);
+    let r = p.search(cfg.clone(), "ubuntu", None, cancel()).unwrap();
+    assert_eq!(r.len(), 1);
+    assert_eq!((r[0].title.as_str(), r[0].size, r[0].seeders, r[0].leechers), ("Ubuntu 24.04", Some(6_000_000_000), Some(12), Some(3)));
+    assert_eq!(r[0].date.as_deref(), Some("2023-11-14"));
+    assert!(r[0].page_url.as_deref().unwrap().ends_with("viewtopic.php?t=555"));
+    let seen = mock.requests();
+    assert!(seen[0].starts_with("POST /forum/login.php"), "login comes first: {}", seen[0]);
+
+    let resolved = p.resolve(cfg, &r[0], cancel()).unwrap();
+    assert!(resolved.torrent_base64.is_some());
+    assert!(mock.requests().iter().any(|q| q.starts_with("GET /forum/dl.php?t=555")));
 }

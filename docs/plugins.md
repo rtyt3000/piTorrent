@@ -13,6 +13,8 @@
 | `limetorrents.js` | LimeTorrents |
 | `bitsearch.js` | Bitsearch (бывший SolidTorrents) |
 | `nyaa.js` | Nyaa.si |
+| `rutor.js` | Rutor (открытый, без входа) |
+| `rutracker.js` | RuTracker (нужны логин и пароль или cookie; за Cloudflare — см. комментарий в файле) |
 | `example.js` | шаблон, показывающий весь API — удобно скопировать и изменить `id` |
 
 Плагины без обязательных настроек включены сразу. Пять из них (кроме Torznab, Internet Archive и шаблона) — порты официальных поисковых плагинов qBittorrent; EZTV, TorLock и 1337x не перенесены, так как закрыты Cloudflare, а TorrentProject не работает.
