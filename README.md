@@ -1,5 +1,7 @@
 # piTorrent
 
+![assent/screenshot.png](assets/screenshot.png)
+
 Лёгкий настольный BitTorrent-клиент на Rust с поиском по трекерам через JavaScript-плагины.
 
 Интерфейс — [iced](https://iced.rs), торрент-движок — [librqbit](https://github.com/ikatson/rqbit). Основная платформа — Windows (ассоциации файлов и автозапуск реализованы через реестр), но код собирается и под другие ОС.
