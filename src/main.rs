@@ -309,6 +309,8 @@ pub struct App {
     pub adding: Option<usize>,
     /// When the memory was last trimmed while the window is in the tray.
     pub last_trim: Option<std::time::Instant>,
+    /// Set when the window is minimized: the memory is trimmed once a moment later.
+    pub trim_after: Option<std::time::Instant>,
     pub last_click: Option<(usize, std::time::Instant)>,
 }
 
@@ -525,6 +527,7 @@ impl App {
             },
             adding: None,
             last_trim: None,
+            trim_after: None,
             last_click: None,
         };
         (
@@ -645,6 +648,11 @@ impl App {
                 if self.motion.hidden && self.last_trim.is_none_or(|t| t.elapsed() > Duration::from_secs(30)) {
                     platform::trim_memory();
                     self.last_trim = Some(std::time::Instant::now());
+                }
+                // Minimized with the button: Windows does not trim a borderless window by itself.
+                if self.trim_after.is_some_and(|t| t.elapsed() > Duration::from_secs(1)) {
+                    platform::trim_memory();
+                    self.trim_after = None;
                 }
                 if self.polling {
                     return Task::none();
@@ -1021,7 +1029,10 @@ impl App {
                 return Task::batch(tasks.into_iter().chain(round).chain(opens));
             }
             Msg::WindowDrag => return window::oldest().and_then(window::drag),
-            Msg::WindowMinimize => return window::oldest().and_then(|id| window::minimize(id, true)),
+            Msg::WindowMinimize => {
+                self.trim_after = Some(std::time::Instant::now());
+                return window::oldest().and_then(|id| window::minimize(id, true));
+            }
             Msg::WindowToggleMax => return window::oldest().and_then(window::toggle_maximize),
             Msg::WindowClose => {
                 return window::oldest().and_then(|id| Task::done(Msg::CloseRequested(id)));
