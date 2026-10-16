@@ -1,0 +1,12 @@
+Icons in this folder come from two sources.
+
+1. IntelliJ Platform icons (the "expui" New UI set), (c) JetBrains s.r.o., licensed under the
+   Apache License 2.0 (see LICENSE-Apache-2.0.txt). Source:
+   https://github.com/JetBrains/intellij-community/tree/master/platform/icons/src/expui
+   Files used: download, upload, search, listFiles, settings, close,
+   up, down, copy, open (general); run, testPaused (run);  ;
+   folder (nodes); text (fileTypes); checked (actions); warningOutline (status); addLink, addFile (actions).
+   The icons were recolored at runtime. JetBrains product logos are not used.
+
+2. Phosphor Icons (https://phosphoricons.com), MIT License, Copyright (c) 2023 Phosphor Icons.
+   Files: play, pause, trash (fill), chevron, check, dash, square; minimize is our own drawing.

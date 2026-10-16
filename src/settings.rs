@@ -1,0 +1,96 @@
+use crate::i18n::Language;
+use crate::theme::Mode;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Settings {
+    pub theme: Mode,
+    pub language: Language,
+    pub close_to_tray: bool,
+    pub autostart: bool,
+    pub notify_complete: bool,
+    pub download_dir: String,
+    pub start_now: bool,
+    pub port: u16,
+    pub dht: bool,
+    /// 0 means unlimited
+    pub max_downloads: u32,
+    pub max_seeds: u32,
+    pub down_limit: u32,
+    pub up_limit: u32,
+    pub plugins: [bool; 5],
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        let dir = dirs::download_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Torrents");
+        Self {
+            theme: Mode::Dark,
+            language: Language::Auto,
+            close_to_tray: true,
+            autostart: false,
+            notify_complete: true,
+            download_dir: dir.to_string_lossy().into_owned(),
+            start_now: true,
+            port: 51413,
+            dht: true,
+            max_downloads: 3,
+            max_seeds: 5,
+            down_limit: 0,
+            up_limit: 0,
+            plugins: [true, true, false, true, false],
+        }
+    }
+}
+
+fn config_root() -> PathBuf {
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// `PITORRENT_PROFILE` selects a separate data folder, so a second copy can run side by side.
+pub fn profile() -> Option<String> {
+    std::env::var("PITORRENT_PROFILE").ok().filter(|p| !p.is_empty())
+}
+
+pub fn app_dir() -> PathBuf {
+    match profile() {
+        Some(p) => config_root().join(format!("piTorrent-{p}")),
+        None => config_root().join("piTorrent"),
+    }
+}
+
+/// Keeps settings and torrents from before the app was renamed from Tidepool.
+fn migrate_legacy_dir() {
+    if profile().is_some() {
+        return;
+    }
+    let (old, new) = (config_root().join("Tidepool"), app_dir());
+    if old.exists() && !new.exists() {
+        let _ = std::fs::rename(old, new);
+    }
+}
+
+fn file() -> PathBuf {
+    app_dir().join("settings.json")
+}
+
+impl Settings {
+    pub fn load() -> Self {
+        migrate_legacy_dir();
+        std::fs::read_to_string(file())
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self) {
+        let _ = std::fs::create_dir_all(app_dir());
+        if let Ok(s) = serde_json::to_string_pretty(self) {
+            let _ = std::fs::write(file(), s);
+        }
+    }
+}

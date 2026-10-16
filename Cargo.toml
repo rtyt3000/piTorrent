@@ -1,0 +1,29 @@
+[package]
+name = "piTorrent"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+iced = { version = "0.14", features = ["tokio", "svg"] }
+librqbit = "9.0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+rfd = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "6"
+async-trait = "0.1"
+tray-icon = "0.26"
+sys-locale = "0.3"
+auto-launch = "0.6"
+raw-window-handle = "0.6"
+notify-rust = "4"
+rquickjs = "0.14"
+reqwest = { version = "0.13", features = ["blocking", "cookies"] }
+scraper = "0.27"
+ego-tree = "0.11"
+encoding_rs = "0.8"
+base64 = "0.22"
+keyring = "4"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
