@@ -183,6 +183,7 @@ impl App {
             );
         }
         if let Some(d) = self.dialog {
+            let t = self.motion.dialog_t();
             let content = match d {
                 Dialog::Add => self.add_dialog(p),
                 Dialog::Create => self.create_dialog(p),
@@ -192,7 +193,7 @@ impl App {
                 Dialog::Plugin => self.plugin_dialog_view(p),
             };
             layers.push(
-                mouse_area(container(Space::new()).width(GROW).height(GROW).style(theme::scrim()))
+                mouse_area(container(Space::new()).width(GROW).height(GROW).style(theme::scrim(t)))
                     .on_press(Msg::CloseDialog)
                     .into(),
             );
@@ -200,7 +201,8 @@ impl App {
                 container(mouse_area(content).on_press(Msg::Noop))
                     .center_x(GROW)
                     .center_y(GROW)
-                    .padding(16)
+                    // Rises into place while the scrim fades in.
+                    .padding(Padding { top: 16.0 + (1.0 - t) * 28.0, right: 16.0, bottom: 16.0, left: 16.0 })
                     .into(),
             );
         }
@@ -545,7 +547,7 @@ impl App {
         .clip(true);
         let m = |s: String| mono(s, 12.0, p.txt2).wrapping(iced::widget::text::Wrapping::None);
         let cell = row![
-            progress_bar(0.0..=100.0, pct).girth(5).style(theme::bar(p, color)),
+            progress_bar(0.0..=100.0, self.motion.bar(t.id, pct)).girth(5).style(theme::bar(p, color)),
             m(format!("{pct:.0}%")).width(34).align_x(alignment::Horizontal::Right),
         ]
         .spacing(10)

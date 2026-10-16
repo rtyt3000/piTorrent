@@ -13,6 +13,7 @@ mod plugins;
 mod search;
 mod icons;
 mod input;
+mod motion;
 mod settings;
 mod single_instance;
 mod theme;
@@ -302,12 +303,14 @@ pub struct App {
     pub sr: SearchState,
     pub tracker_query: String,
     pub plugin_dialog: Option<PluginDialog>,
+    pub motion: motion::Motion,
 }
 
 #[derive(Clone)]
 pub enum Msg {
     Started(Result<Shared, String>),
     Tick,
+    Frame(std::time::Instant),
     Snap(Snapshot),
     Noop,
     Done(Result<(), String>),
@@ -506,6 +509,7 @@ impl App {
             sr: SearchState::default(),
             tracker_query: String::new(),
             plugin_dialog: None,
+            motion: motion::Motion::new(),
         };
         (
             app,
@@ -566,6 +570,11 @@ impl App {
             iced::time::every(Duration::from_millis(200)).map(|_| Msg::TrayPoll),
             window::close_requests().map(Msg::CloseRequested),
             iced::event::listen_with(input::on_event),
+            if self.motion.animating(self.dialog.is_some(), self.view == View::Search && self.sr.running()) {
+                window::frames().map(Msg::Frame)
+            } else {
+                Subscription::none()
+            },
         ])
     }
 
@@ -594,6 +603,17 @@ impl App {
     }
 
     fn update(&mut self, msg: Msg) -> Task<Msg> {
+        let was_open = self.dialog.is_some();
+        let task = self.update_inner(msg);
+        match (was_open, self.dialog.is_some()) {
+            (false, true) => self.motion.dialog_opened(),
+            (true, false) => self.motion.dialog_closed(),
+            _ => {}
+        }
+        task
+    }
+
+    fn update_inner(&mut self, msg: Msg) -> Task<Msg> {
         match msg {
             Msg::Started(Ok(e)) => {
                 self.engine = Some(e);
@@ -618,7 +638,9 @@ impl App {
                     Msg::Snap,
                 );
             }
+            Msg::Frame(_) => {}
             Msg::Snap(s) => {
+                self.motion.snapshot(&s.torrents);
                 self.notify_completed(&s);
                 self.snap = s;
                 self.polling = false;
@@ -951,12 +973,15 @@ impl App {
                 let tasks: Vec<_> = actions
                     .into_iter()
                     .map(|a| match a {
-                        TrayAction::Show => window::oldest().and_then(|id| {
-                            Task::batch([
-                                window::set_mode(id, window::Mode::Windowed),
-                                window::gain_focus(id),
-                            ])
-                        }),
+                        TrayAction::Show => {
+                            self.motion.hidden = false;
+                            window::oldest().and_then(|id| {
+                                Task::batch([
+                                    window::set_mode(id, window::Mode::Windowed),
+                                    window::gain_focus(id),
+                                ])
+                            })
+                        }
                         TrayAction::Quit => self.quit(),
                     })
                     .collect();
@@ -971,6 +996,7 @@ impl App {
             Msg::WindowResize(dir) => return window::oldest().and_then(move |id| window::drag_resize(id, dir)),
             Msg::CloseRequested(id) => {
                 return if self.settings.close_to_tray && self.tray.is_some() {
+                    self.motion.hidden = true;
                     window::set_mode(id, window::Mode::Hidden)
                 } else {
                     self.quit()

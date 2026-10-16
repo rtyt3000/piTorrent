@@ -94,7 +94,7 @@ impl App {
         if s.searched && !s.sources.is_empty() {
             let chips = s.sources.iter().map(|(_, name, status)| {
                 let (label, color) = match status {
-                    SourceStatus::Running => (format!("{name} …"), p.mute),
+                    SourceStatus::Running => (format!("{name} …"), Color { a: 0.45 + 0.55 * self.motion.pulse(), ..p.txt2 }),
                     SourceStatus::Done(n) => (format!("{name} · {n}"), p.txt2),
                     SourceStatus::Failed(_) => (format!("{name} ✕"), p.err),
                 };

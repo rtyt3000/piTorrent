@@ -204,9 +204,10 @@ pub fn badge(p: Palette) -> impl Fn(&Theme) -> container::Style {
     }
 }
 
-pub fn scrim() -> impl Fn(&Theme) -> container::Style {
-    |_| container::Style {
-        background: Some(Background::Color(rgba(0.0, 0.0, 0.0, 0.5))),
+/// `t` is how far the dialog has faded in (0..=1).
+pub fn scrim(t: f32) -> impl Fn(&Theme) -> container::Style {
+    move |_| container::Style {
+        background: Some(Background::Color(rgba(0.0, 0.0, 0.0, 0.5 * t))),
         ..Default::default()
     }
 }

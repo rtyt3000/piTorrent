@@ -18,6 +18,7 @@ PITORRENT_PROFILE=dev cargo run   # отдельные данные, можно 
 - `src/engine/` — граница с торрент-библиотекой: трейт `Backend`, `Engine` (очередь поверх бэкенда), `rqbit.rs` (librqbit), `demo.rs` (фейк).
 - `src/plugins/` — песочница JS-плагинов (QuickJS): `host.rs`, `http.rs`, `manager.rs`, `store.rs`, `tests.rs`.
 - `src/search.rs` — параллельный поиск по включённым плагинам, кэш, сортировка.
+- `src/motion.rs` — анимации (`Motion`); новую анимацию добавлять сюда и учитывать в `animating()`, иначе кадры не запросятся.
 - `src/settings.rs`, `src/categories.rs` — персистентные данные в JSON.
 - Платформа: `assoc.rs`, `autostart.rs`, `single_instance.rs`, `tray.rs`, `notify.rs`, `platform.rs`, `app_icon.rs`.
 - `src/i18n.rs` + `assets/locales/{en,ru}.json` — строки интерфейса.
