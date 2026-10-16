@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-iced = { version = "0.14", features = ["tokio", "svg"] }
+iced = { version = "0.14", features = ["tokio", "svg", "image"] }
 librqbit = "9.0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 rfd = "0.17"

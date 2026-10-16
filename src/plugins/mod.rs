@@ -127,6 +127,9 @@ pub struct PluginMeta {
     pub description: L10n,
     #[serde(default)]
     pub author: String,
+    /// A small PNG as a `data:image/png;base64,...` URL. Bundled plugins get theirs from the app.
+    #[serde(default)]
+    pub icon: Option<String>,
     /// Hosts the plugin may connect to; `$setting:key` takes the host from a URL setting.
     #[serde(default)]
     pub hosts: Vec<String>,

@@ -22,6 +22,30 @@ const BUNDLED: &[(&str, &str)] = &[
     ("example.js", include_str!("../../assets/plugins/example.js")),
 ];
 
+/// Icons of the bundled plugins, by plugin id (the favicons of the services they search).
+const BUNDLED_ICONS: &[(&str, &[u8])] = &[
+    ("internet-archive", include_bytes!("../../assets/plugins/icons/internet-archive.png")),
+    ("piratebay", include_bytes!("../../assets/plugins/icons/piratebay.png")),
+    ("limetorrents", include_bytes!("../../assets/plugins/icons/limetorrents.png")),
+    ("bitsearch", include_bytes!("../../assets/plugins/icons/bitsearch.png")),
+    ("nyaa", include_bytes!("../../assets/plugins/icons/nyaa.png")),
+    ("rutor", include_bytes!("../../assets/plugins/icons/rutor.png")),
+    ("rutracker", include_bytes!("../../assets/plugins/icons/rutracker.png")),
+];
+
+const MAX_ICON_BYTES: usize = 64 << 10;
+
+/// The plugin's own icon (a PNG data URL) or, for a bundled plugin, the one shipped with the app.
+fn load_icon(meta: &PluginMeta, bundled: bool) -> Option<iced::widget::image::Handle> {
+    let own = meta.icon.as_deref().and_then(|u| u.strip_prefix("data:image/png;base64,")).and_then(|b64| {
+        base64::engine::general_purpose::STANDARD.decode(b64.trim()).ok().filter(|b| b.len() <= MAX_ICON_BYTES && b.starts_with(&[0x89, b'P', b'N', b'G']))
+    });
+    let bytes = own.or_else(|| {
+        bundled.then(|| BUNDLED_ICONS.iter().find(|(id, _)| *id == meta.id).map(|(_, b)| b.to_vec())).flatten()
+    })?;
+    Some(iced::widget::image::Handle::from_bytes(bytes))
+}
+
 const MAX_RESULTS: usize = 200;
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(45);
 
@@ -30,6 +54,7 @@ pub struct Plugin {
     pub meta: PluginMeta,
     pub path: Option<PathBuf>,
     pub bundled: bool,
+    pub icon: Option<iced::widget::image::Handle>,
     source: Arc<str>,
     http: PluginHttp,
     state: Arc<Mutex<Map<String, Value>>>,
@@ -39,6 +64,7 @@ impl Plugin {
     pub fn from_source(source: &str, path: Option<PathBuf>, bundled: bool) -> Result<Plugin, PluginError> {
         let meta = host::read_meta(source)?;
         Ok(Plugin {
+            icon: load_icon(&meta, bundled),
             http: PluginHttp::new(&format!("piTorrent/{} (plugin {})", env!("CARGO_PKG_VERSION"), meta.id)),
             meta,
             path,

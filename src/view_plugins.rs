@@ -171,6 +171,11 @@ impl App {
             Some(n) => mono(n.to_string(), 12.0, color),
             None => mono("—", 12.0, p.faint),
         };
+        let mut source = row![].spacing(6).align_y(Alignment::Center);
+        if let Some(icon) = self.plugins.get(&r.plugin_id).and_then(|pl| pl.icon.clone()) {
+            source = source.push(iced::widget::image(icon).width(16).height(16));
+        }
+        let source = source.push(tx(r.plugin_name.clone(), 12.0, p.txt2).wrapping(one_line));
         let sub = r.category.as_deref().map(category_name).unwrap_or_default();
         let name = container(
             column![tx(r.title.clone(), 13.0, p.txt).wrapping(one_line), tx(sub, 11.5, p.mute).wrapping(one_line)].spacing(2),
@@ -184,7 +189,7 @@ impl App {
                     m(r.size.map(crate::fmt::bytes).unwrap_or_else(|| "—".into())).width(W_SIZE),
                     num(r.seeders, p.seed).width(W_PEERS),
                     num(r.leechers, p.err).width(W_PEERS),
-                    tx(r.plugin_name.clone(), 12.0, p.txt2).wrapping(one_line).width(W_SOURCE),
+                    source.width(W_SOURCE),
                     m(r.date.clone().unwrap_or_else(|| "—".into())).width(W_DATE),
                 ]
                 .spacing(12)
@@ -219,12 +224,15 @@ impl App {
             let enabled = self.plugins.store.is_enabled(meta);
             let missing = self.plugins.store.missing_required(meta);
             let letters: String = meta.name.chars().filter(|c| c.is_alphanumeric()).take(2).collect();
-            let badge = container(mono(letters, 13.0, p.dl))
-                .width(38)
-                .height(38)
-                .center_x(38)
-                .center_y(38)
-                .style(theme::fill(Color { a: 0.18, ..p.dl }, 10.0));
+            let badge = match &plugin.icon {
+                Some(icon) => container(iced::widget::image(icon.clone()).width(24).height(24)),
+                None => container(mono(letters, 13.0, p.dl)),
+            }
+            .width(38)
+            .height(38)
+            .center_x(38)
+            .center_y(38)
+            .style(theme::fill(Color { a: 0.18, ..p.dl }, 10.0));
 
             let (status, status_color) = if !missing.is_empty() {
                 (trf("plugins.needs", &[missing.join(", ")]), p.pause)

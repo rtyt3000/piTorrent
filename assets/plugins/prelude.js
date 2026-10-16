@@ -118,6 +118,7 @@
       version: def.version,
       description: def.description,
       author: def.author,
+      icon: def.icon,
       hosts: def.hosts,
       categories: def.categories,
       settings: def.settings,

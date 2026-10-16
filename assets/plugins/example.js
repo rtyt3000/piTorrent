@@ -1,4 +1,4 @@
-// A template that shows every part of the plugin API. Texts can be plain strings or
+ // A template that shows every part of the plugin API. Texts can be plain strings or
 // { en: "...", ru: "..." } objects: the one for the interface language is shown.
 // Copy it, change `id` and the code, and
 // install the copy from Settings / Trackers and plugins.

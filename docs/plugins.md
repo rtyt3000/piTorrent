@@ -30,6 +30,7 @@ definePlugin({
   version: "1.0.0",
   description: { en: "...", ru: "..." },   // или просто строка
   author: "me",
+  icon: "data:image/png;base64,...",   // необязательно: PNG до 64 КБ, лучше 32×32
   hosts: ["example.org", "$setting:baseUrl"],
   categories: ["movies", "music"],
   settings: [ /* см. ниже */ ],

@@ -136,6 +136,10 @@ impl App {
         let category = self.sr.category.clone();
         let mut tasks = Vec::new();
         for plugin in self.plugins.searchable() {
+            // A plugin that does not know the chosen category would answer with everything.
+            if category.as_ref().is_some_and(|c| !plugin.meta.categories.contains(c)) {
+                continue;
+            }
             let id = plugin.meta.id.clone();
             let key = (id.clone(), query.to_lowercase(), category.clone());
             self.sr.cache.retain(|_, (t, _)| now.duration_since(*t) < CACHE_TTL);

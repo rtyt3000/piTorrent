@@ -377,6 +377,10 @@ fn bundled_plugins_load_and_can_be_installed_and_removed() {
     assert!(m.failed.is_empty(), "{:?}", m.failed);
     let ids: Vec<_> = m.plugins.iter().map(|p| p.meta.id.as_str()).collect();
     assert_eq!(ids, ["torznab", "internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa", "rutor", "rutracker", "example"]);
+    for p in &m.plugins {
+        let has_icon = !matches!(p.meta.id.as_str(), "torznab" | "torrents-csv" | "example");
+        assert_eq!(p.icon.is_some(), has_icon, "icon of {}", p.meta.id);
+    }
     // Only plugins that need nothing are searchable out of the box.
     let searchable: Vec<_> = m.searchable().iter().map(|p| p.meta.id.clone()).collect();
     assert_eq!(searchable, ["internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa", "rutor"]);
