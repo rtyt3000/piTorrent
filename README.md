@@ -31,6 +31,8 @@ sudo dnf install gcc pkgconf-pkg-config gtk3-devel libayatana-appindicator-gtk3-
 
 На Debian/Ubuntu: `build-essential pkg-config libgtk-3-dev libayatana-appindicator3-dev libxkbcommon-dev libwayland-dev`.
 
+Готовый архив (`piTorrent-<версия>-linux-x86_64.tar.gz`) лежит в релизах. Ему нужны `libgtk-3` и `libayatana-appindicator3` (в Fedora они обычно уже есть, в Ubuntu: `libgtk-3-0 libayatana-appindicator3-1`).
+
 Что важно знать:
 
 - Трей работает через StatusNotifier/AppIndicator. В GNOME для него нужно расширение AppIndicator; без него значок не виден, поэтому там лучше отключить «Закрывать в трей».
@@ -49,6 +51,10 @@ cargo test
 |---|---|
 | `PITORRENT_PROFILE=name` | Отдельная папка данных (`piTorrent-name`) и порт single-instance, чтобы запускать вторую копию параллельно |
 | `PITORRENT_DEMO=1` | Фиктивный движок с примерами торрентов — для разработки интерфейса и скриншотов без сети |
+
+## Релизы
+
+Релизы собирает GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)): достаточно запушить тег `vX.Y.Z`, совпадающий с `version` в `Cargo.toml`. Для Windows и Linux собираются архивы (`scripts/package.ps1`, `scripts/package.sh`) с файлами `.sha256`, они прикрепляются к релизу. Проверка сборки и тестов на обеих ОС — `.github/workflows/ci.yml`.
 
 ## Данные
 
