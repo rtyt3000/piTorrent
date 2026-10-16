@@ -50,7 +50,7 @@ cargo test
 - [docs/plugins.md](docs/plugins.md) — как писать плагины поиска.
 - [AGENTS.md](AGENTS.md) — заметки для ИИ-агентов и контрибьюторов.
 
-Иконки в `assets/icons` распространяются по собственным лицензиям (см. файлы `LICENSE*` в этой папке). Шрифт — Geist.
+Код распространяется под лицензией [MIT](LICENSE). Иконки в `assets/icons` распространяются по собственным лицензиям (см. файлы `LICENSE*` в этой папке). Шрифт — Geist.
 
 Страны пиров определяются офлайн по базе [IP to Country Lite](https://db-ip.com) от DB-IP (CC BY 4.0), флаги — [flagcdn.com](https://flagcdn.com). Данные в `assets/geo/` собирает `tools/gen_geo.py`.
 
