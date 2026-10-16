@@ -42,32 +42,43 @@ use widgets::{TreeRow, build_tree};
 fn main() -> iced::Result {
     let minimized = std::env::args().any(|a| a == autostart::MINIMIZED_ARG);
     let arg = assoc::open_arg();
-    let has_arg = arg.is_some();
     if !single_instance::acquire(minimized, arg) {
         return Ok(());
     }
     notify::init();
-    let start_hidden = minimized && !has_arg && Settings::load().close_to_tray;
-    iced::application(App::new, App::update, App::view)
-        .title("piTorrent")
+    // The app runs as a daemon: the window is opened (and, when sent to the tray, really closed)
+    // by `App`, so the graphics stack is freed while nobody looks at it.
+    iced::daemon(App::new, App::update, view_window)
+        .title(|_: &App, _| "piTorrent".to_string())
         .subscription(App::subscription)
-        .theme(App::theme)
+        .theme(|app: &App, _| app.theme())
         .font(include_bytes!("../assets/fonts/Geist-Regular.ttf").as_slice())
         .font(include_bytes!("../assets/fonts/Geist-Medium.ttf").as_slice())
         .font(include_bytes!("../assets/fonts/Geist-SemiBold.ttf").as_slice())
         .font(include_bytes!("../assets/fonts/GeistMono-Regular.ttf").as_slice())
         .default_font(widgets::SANS)
-        .window(window::Settings {
-            size: Size::new(1280.0, 820.0),
-            min_size: Some(Size::new(960.0, 600.0)),
-            position: window::Position::Centered,
-            exit_on_close_request: false,
-            decorations: false,
-            visible: !start_hidden,
-            icon: window::icon::from_rgba(app_icon::rgba(), app_icon::SIZE, app_icon::SIZE).ok(),
-            ..Default::default()
-        })
         .run()
+}
+
+fn view_window(app: &App, _window: window::Id) -> view::El<'_> {
+    app.view()
+}
+
+fn window_settings() -> window::Settings {
+    window::Settings {
+        size: Size::new(1280.0, 820.0),
+        min_size: Some(Size::new(960.0, 600.0)),
+        position: window::Position::Centered,
+        exit_on_close_request: false,
+        decorations: false,
+        icon: window::icon::from_rgba(app_icon::rgba(), app_icon::SIZE, app_icon::SIZE).ok(),
+        ..Default::default()
+    }
+}
+
+/// Started by autostart (or similar) with the window meant to stay in the tray.
+fn starts_in_tray(close_to_tray: bool) -> bool {
+    std::env::args().any(|a| a == autostart::MINIMIZED_ARG) && assoc::open_arg().is_none() && close_to_tray
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -292,7 +303,8 @@ pub struct App {
     pub notice: Option<String>,
     pub tray: Option<Tray>,
     pub polling: bool,
-    pub corners_done: bool,
+    /// The id of the window while it is open; `None` while the app sits in the tray.
+    pub window: Option<window::Id>,
     pub categories: Categories,
     pub category_filter: CategoryFilter,
     pub new_cat_name: String,
@@ -374,6 +386,7 @@ pub enum Msg {
     AutostartToggle,
     TrayPoll,
     CloseRequested(window::Id),
+    WindowOpened(window::Id),
     WindowDrag,
     WindowMinimize,
     WindowToggleMax,
@@ -503,7 +516,7 @@ impl App {
             notice: None,
             tray: Tray::new(),
             polling: false,
-            corners_done: false,
+            window: None,
             categories: Categories::load(),
             category_filter: CategoryFilter::All,
             new_cat_name: String::new(),
@@ -517,23 +530,35 @@ impl App {
             sr: SearchState::default(),
             tracker_query: String::new(),
             plugin_dialog: None,
-            motion: {
-                // Started minimized to the tray: the window is not drawn, see `main`.
-                let mut m = motion::Motion::new();
-                m.hidden = std::env::args().any(|a| a == autostart::MINIMIZED_ARG)
-                    && assoc::open_arg().is_none()
-                    && start.close_to_tray;
-                m
-            },
+            motion: motion::Motion::new(),
             adding: None,
             last_trim: None,
             trim_after: None,
             last_click: None,
         };
+        let mut app = app;
+        let open = if starts_in_tray(start.close_to_tray) {
+            app.motion.hidden = true;
+            Task::none()
+        } else {
+            app.open_window()
+        };
         (
             app,
-            Task::perform(async move { engine::Engine::start(&start).await }, Msg::Started),
+            Task::batch([open, Task::perform(async move { engine::Engine::start(&start).await }, Msg::Started)]),
         )
+    }
+
+    fn open_window(&mut self) -> Task<Msg> {
+        let (id, open) = window::open(window_settings());
+        self.window = Some(id);
+        self.motion.hidden = false;
+        open.map(Msg::WindowOpened)
+    }
+
+    /// Runs `f` on the window, if there is one.
+    fn on_window(&self, f: impl FnOnce(window::Id) -> Task<Msg>) -> Task<Msg> {
+        self.window.map_or_else(Task::none, f)
     }
 
     pub fn palette(&self) -> Palette {
@@ -1003,46 +1028,39 @@ impl App {
                     .into_iter()
                     .map(|arg| self.update(Msg::OpenArg(arg)))
                     .collect();
-                let mut round = Vec::new();
-                if !self.corners_done {
-                    self.corners_done = true;
-                    round.push(
-                        window::oldest()
-                            .and_then(|id| window::run(id, platform::round_corners).discard()),
-                    );
-                }
                 let tasks: Vec<_> = actions
                     .into_iter()
                     .map(|a| match a {
-                        TrayAction::Show => {
-                            self.motion.hidden = false;
-                            window::oldest().and_then(|id| {
-                                Task::batch([
-                                    window::set_mode(id, window::Mode::Windowed),
-                                    window::gain_focus(id),
-                                ])
-                            })
-                        }
+                        TrayAction::Show => match self.window {
+                            Some(id) => Task::batch([
+                                window::set_mode(id, window::Mode::Windowed),
+                                window::gain_focus(id),
+                            ]),
+                            None => self.open_window(),
+                        },
                         TrayAction::Quit => self.quit(),
                     })
                     .collect();
-                return Task::batch(tasks.into_iter().chain(round).chain(opens));
+                return Task::batch(tasks.into_iter().chain(opens));
             }
-            Msg::WindowDrag => return window::oldest().and_then(window::drag),
+            Msg::WindowOpened(id) => return window::run(id, platform::round_corners).discard(),
+            Msg::WindowDrag => return self.on_window(window::drag),
             Msg::WindowMinimize => {
                 self.trim_after = Some(std::time::Instant::now());
-                return window::oldest().and_then(|id| window::minimize(id, true));
+                return self.on_window(|id| window::minimize(id, true));
             }
-            Msg::WindowToggleMax => return window::oldest().and_then(window::toggle_maximize),
+            Msg::WindowToggleMax => return self.on_window(window::toggle_maximize),
             Msg::WindowClose => {
-                return window::oldest().and_then(|id| Task::done(Msg::CloseRequested(id)));
+                return self.on_window(|id| Task::done(Msg::CloseRequested(id)));
             }
-            Msg::WindowResize(dir) => return window::oldest().and_then(move |id| window::drag_resize(id, dir)),
+            Msg::WindowResize(dir) => return self.on_window(move |id| window::drag_resize(id, dir)),
             Msg::CloseRequested(id) => {
                 return if self.settings.close_to_tray && self.tray.is_some() {
+                    // Really close the window: the renderer and the GPU memory go with it.
+                    self.window = None;
                     self.motion.hidden = true;
                     self.last_trim = None;
-                    window::set_mode(id, window::Mode::Hidden)
+                    window::close(id)
                 } else {
                     self.quit()
                 };
