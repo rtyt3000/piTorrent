@@ -10,12 +10,16 @@ use std::time::{Duration, Instant};
 const DIALOG: Duration = Duration::from_millis(240);
 /// Matches the polling interval, so a bar is always moving towards the next sample.
 const BAR: Duration = Duration::from_millis(1000);
+const PAGE: Duration = Duration::from_millis(240);
+const TAB: Duration = Duration::from_millis(200);
 const PULSE_PERIOD: f32 = 1.4;
 
 pub struct Motion {
     epoch: Instant,
     dialog: Animation<bool>,
     bars: HashMap<usize, Animation<f32>>,
+    page: Option<Instant>,
+    tab: Option<Instant>,
     /// Nothing is drawn while the window sits in the tray, so nothing needs to animate.
     pub hidden: bool,
 }
@@ -27,12 +31,31 @@ fn dialog_animation() -> Animation<bool> {
 impl Motion {
     pub fn new() -> Self {
         let now = Instant::now();
-        Motion { epoch: now, dialog: dialog_animation(), bars: HashMap::new(), hidden: false }
+        Motion { epoch: now, dialog: dialog_animation(), bars: HashMap::new(), page: None, tab: None, hidden: false }
     }
 
     pub fn dialog_opened(&mut self) {
         self.dialog = dialog_animation();
         self.dialog.go_mut(true, Instant::now());
+    }
+
+    /// The main view or the list filter changed.
+    pub fn page_changed(&mut self) {
+        self.page = Some(Instant::now());
+    }
+
+    /// A tab of the details panel or of the settings changed.
+    pub fn tab_changed(&mut self) {
+        self.tab = Some(Instant::now());
+    }
+
+    /// 0 right after a page change, 1 once it has settled.
+    pub fn page_t(&self) -> f32 {
+        progress(self.page, PAGE)
+    }
+
+    pub fn tab_t(&self) -> f32 {
+        progress(self.tab, TAB)
     }
 
     pub fn dialog_closed(&mut self) {
@@ -76,6 +99,11 @@ impl Motion {
             return false;
         }
         let now = Instant::now();
-        searching || (dialog_open && self.dialog.is_animating(now)) || self.bars.values().any(|b| b.is_animating(now))
+        searching || self.page_t() < 1.0 || self.tab_t() < 1.0 || (dialog_open && self.dialog.is_animating(now)) || self.bars.values().any(|b| b.is_animating(now))
     }
+}
+
+fn progress(since: Option<Instant>, duration: Duration) -> f32 {
+    let x = since.map_or(1.0, |s| (s.elapsed().as_secs_f32() / duration.as_secs_f32()).min(1.0));
+    1.0 - (1.0 - x).powi(3)
 }

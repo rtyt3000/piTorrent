@@ -111,6 +111,20 @@ fn resize_grips<'a>() -> Vec<El<'a>> {
     ]
 }
 
+/// Fades the content in by laying a veil of the background colour over it that thins out, while
+/// the content rises into place. The veil is always there (fully transparent at rest) so the
+/// widget tree, and with it the scroll position, does not change when the animation ends.
+fn reveal<'a>(t: f32, rise: f32, bg: Color, content: El<'a>) -> El<'a> {
+    let k = 1.0 - t;
+    stack![
+        container(content).padding(Padding { top: k * rise, right: 0.0, bottom: 0.0, left: 0.0 }).width(GROW).height(GROW),
+        container(Space::new()).width(GROW).height(GROW).style(theme::fill(Color { a: k, ..bg }, 12.0)),
+    ]
+    .width(GROW)
+    .height(GROW)
+    .into()
+}
+
 fn note_top<'a>(p: Palette, text: String) -> El<'a> {
     container(tx(text, 14.0, p.mute)).width(GROW).center_x(GROW).padding([40, 16]).into()
 }
@@ -269,7 +283,7 @@ impl App {
             View::Search => self.search_island(p),
             View::Settings => self.settings_island(p),
         };
-        row![self.rail(p), main].spacing(6).height(GROW).into()
+        row![self.rail(p), reveal(self.motion.page_t(), 14.0, p.bg, main)].spacing(6).height(GROW).into()
     }
 
     fn rail(&self, p: Palette) -> El<'_> {
@@ -611,13 +625,18 @@ impl App {
 
         let body: El = match cur {
             None => centered_note(p, tr("detail.select")),
-            Some(t) => scrollable(match self.tab {
-                DetailTab::General => self.general_tab(p, t, detail),
-                DetailTab::Files => self.files_tab(p, detail),
-                DetailTab::Peers => self.peers_tab(p, detail),
-            })
-            .height(GROW)
-            .into(),
+            Some(t) => reveal(
+                self.motion.tab_t(),
+                8.0,
+                p.isl,
+                scrollable(match self.tab {
+                    DetailTab::General => self.general_tab(p, t, detail),
+                    DetailTab::Files => self.files_tab(p, detail),
+                    DetailTab::Peers => self.peers_tab(p, detail),
+                })
+                .height(GROW)
+                .into(),
+            ),
         };
 
         let height = (input::window_size().height * 0.36).clamp(190.0, 292.0);
@@ -798,7 +817,7 @@ impl App {
             SettingsTab::Main => self.settings_main(p),
             SettingsTab::Trackers => self.settings_plugins(p),
         };
-        container(column![head, hline(p), scrollable(body).height(GROW)])
+        container(column![head, hline(p), reveal(self.motion.tab_t(), 8.0, p.isl, scrollable(body).height(GROW).into())])
             .width(GROW)
             .height(GROW)
             .style(theme::island(p))
