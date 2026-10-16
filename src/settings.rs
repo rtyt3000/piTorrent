@@ -20,7 +20,6 @@ pub struct Settings {
     pub max_seeds: u32,
     pub down_limit: u32,
     pub up_limit: u32,
-    pub plugins: [bool; 5],
 }
 
 impl Default for Settings {
@@ -42,7 +41,6 @@ impl Default for Settings {
             max_seeds: 5,
             down_limit: 0,
             up_limit: 0,
-            plugins: [true, true, false, true, false],
         }
     }
 }
