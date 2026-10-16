@@ -307,6 +307,8 @@ pub struct App {
     /// The last click on a torrent row, to recognise a double click.
     /// The search result whose .torrent is being fetched, so its button can show it.
     pub adding: Option<usize>,
+    /// When the memory was last trimmed while the window is in the tray.
+    pub last_trim: Option<std::time::Instant>,
     pub last_click: Option<(usize, std::time::Instant)>,
 }
 
@@ -513,8 +515,16 @@ impl App {
             sr: SearchState::default(),
             tracker_query: String::new(),
             plugin_dialog: None,
-            motion: motion::Motion::new(),
+            motion: {
+                // Started minimized to the tray: the window is not drawn, see `main`.
+                let mut m = motion::Motion::new();
+                m.hidden = std::env::args().any(|a| a == autostart::MINIMIZED_ARG)
+                    && assoc::open_arg().is_none()
+                    && start.close_to_tray;
+                m
+            },
             adding: None,
+            last_trim: None,
             last_click: None,
         };
         (
@@ -631,6 +641,11 @@ impl App {
             }
             Msg::Started(Err(e)) => self.notice = Some(trf("notice.engine", &[e])),
             Msg::Tick => {
+                // Hidden in the tray: give the memory back, now and then again once it has grown.
+                if self.motion.hidden && self.last_trim.is_none_or(|t| t.elapsed() > Duration::from_secs(30)) {
+                    platform::trim_memory();
+                    self.last_trim = Some(std::time::Instant::now());
+                }
                 if self.polling {
                     return Task::none();
                 }
@@ -1015,6 +1030,7 @@ impl App {
             Msg::CloseRequested(id) => {
                 return if self.settings.close_to_tray && self.tray.is_some() {
                     self.motion.hidden = true;
+                    self.last_trim = None;
                     window::set_mode(id, window::Mode::Hidden)
                 } else {
                     self.quit()

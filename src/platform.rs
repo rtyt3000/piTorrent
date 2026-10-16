@@ -11,6 +11,21 @@ mod imp {
         fn DwmSetWindowAttribute(hwnd: isize, attribute: u32, value: *const c_void, size: u32) -> i32;
     }
 
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcess() -> isize;
+        fn SetProcessWorkingSetSize(process: isize, min: usize, max: usize) -> i32;
+    }
+
+    /// Asks Windows to move the idle pages of the process out of RAM; they come back on demand.
+    /// Used while the window sits in the tray, so the process shows a small memory footprint.
+    pub fn trim_memory() {
+        // SAFETY: both calls take no pointers; (-1, -1) is the documented way to trim.
+        unsafe {
+            SetProcessWorkingSetSize(GetCurrentProcess(), usize::MAX, usize::MAX);
+        }
+    }
+
     const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
     const DWMWCP_ROUND: u32 = 2;
 
@@ -37,6 +52,7 @@ mod imp {
 #[cfg(not(windows))]
 mod imp {
     pub fn round_corners(_: &dyn iced::window::Window) {}
+    pub fn trim_memory() {}
 }
 
-pub use imp::round_corners;
+pub use imp::{round_corners, trim_memory};
