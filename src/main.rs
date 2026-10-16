@@ -607,14 +607,7 @@ impl App {
 
     fn update(&mut self, msg: Msg) -> Task<Msg> {
         let was_open = self.dialog.is_some();
-        let (page, tab) = ((self.view, self.filter), (self.tab, self.stab));
         let task = self.update_inner(msg);
-        if page != (self.view, self.filter) {
-            self.motion.page_changed();
-        }
-        if tab != (self.tab, self.stab) {
-            self.motion.tab_changed();
-        }
         match (was_open, self.dialog.is_some()) {
             (false, true) => self.motion.dialog_opened(),
             (true, false) => self.motion.dialog_closed(),
