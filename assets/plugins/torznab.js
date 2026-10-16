@@ -5,8 +5,8 @@ definePlugin({
   name: "Jackett / Prowlarr",
   version: "1.0.0",
   description: {
-    en: "Search all trackers configured in your Jackett or Prowlarr at once.",
-    ru: "Поиск сразу по всем трекерам, настроенным в вашем Jackett или Prowlarr.",
+    en: "Searches every tracker set up in your own Jackett or Prowlarr at once. Both are separate free programs you install yourself (github.com/Jackett/Jackett, github.com/Prowlarr/Prowlarr): add trackers there, then enter its address and API key here and press Test.",
+    ru: "Ищет сразу по всем трекерам, настроенным в вашем Jackett или Prowlarr. Это отдельные бесплатные программы, которые ставятся самостоятельно (github.com/Jackett/Jackett, github.com/Prowlarr/Prowlarr): добавьте там трекеры, затем введите здесь его адрес и ключ API и нажмите «Проверить».",
   },
   author: "piTorrent",
   hosts: ["$setting:baseUrl"],
@@ -58,14 +58,20 @@ definePlugin({
   check: function (ctx) {
     var s = ctx.settings;
     var base = s.baseUrl.replace(/\/+$/, "");
-    if (s.flavor === "prowlarr") {
-      var list = ctx.http.get(base + "/api/v1/indexer", { headers: { "X-Api-Key": s.apiKey } });
-      if (!list.ok) throw new Error("Prowlarr answered " + list.status + " (check the address and the API key)");
-      return list.json().length + " indexers";
+    var name = s.flavor === "prowlarr" ? "Prowlarr" : "Jackett";
+    var r;
+    try {
+      r = s.flavor === "prowlarr"
+        ? ctx.http.get(base + "/api/v1/indexer", { headers: { "X-Api-Key": s.apiKey } })
+        : ctx.http.get(base + "/api/v2.0/indexers", { query: { apikey: s.apiKey, configured: "true" } });
+    } catch (e) {
+      throw new Error(name + " does not answer at " + base + ": is it running, and is the address right? (" + e.message + ")");
     }
-    var r = ctx.http.get(base + "/api/v2.0/indexers", { query: { apikey: s.apiKey, configured: "true" } });
-    if (!r.ok) throw new Error("Jackett answered " + r.status + " (check the address and the API key)");
-    return r.json().length + " indexers";
+    if (r.status === 401 || r.status === 403) throw new Error(name + " refused the API key: copy it again from its page");
+    if (!r.ok) throw new Error(name + " answered " + r.status + ": check the address and that \"Program\" is " + name);
+    var count = r.json().length;
+    if (!count) throw new Error("Connected to " + name + ", but it has no trackers configured yet: add some in its web page");
+    return "Connected to " + name + ": " + count + " trackers";
   },
 
   search: function (ctx, query, opts) {

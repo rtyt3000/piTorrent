@@ -1114,7 +1114,7 @@ impl App {
                 column![
                     row![
                         tx(summary, 12.0, p.mute).width(GROW),
-                        button(tx(tr("filter.all"), 12.0, p.dl)).padding([3, 8]).style(theme::link(p)).on_press(Msg::AddAll),
+                        button(tx(tr("add.all"), 12.0, p.dl)).padding([3, 8]).style(theme::link(p)).on_press(Msg::AddAll),
                         button(tx(tr("add.none"), 12.0, p.dl)).padding([3, 8]).style(theme::link(p)).on_press(Msg::AddNone),
                     ]
                     .spacing(4)

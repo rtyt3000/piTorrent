@@ -426,7 +426,7 @@ fn torznab_plugin_talks_to_jackett() {
     let first = &mock.requests()[0];
     assert!(first.contains("apikey=KEY") && first.contains("Query=ubuntu") && first.contains("Category%5B%5D=4000"), "{first}");
 
-    assert_eq!(p.check(s, cancel()).unwrap().as_deref(), Some("3 indexers"));
+    assert_eq!(p.check(s, cancel()).unwrap().as_deref(), Some("Connected to Jackett: 3 trackers"));
     // Without an address nothing may leave the machine.
     let err = p.search(settings(&[("flavor", "jackett"), ("baseUrl", ""), ("apiKey", "KEY")]), "x", None, cancel()).unwrap_err();
     assert!(!err.0.is_empty());
