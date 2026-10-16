@@ -12,6 +12,11 @@ use std::time::Duration;
 const BUNDLED: &[(&str, &str)] = &[
     ("torznab.js", include_str!("../../assets/plugins/torznab.js")),
     ("internet-archive.js", include_str!("../../assets/plugins/internet-archive.js")),
+    ("piratebay.js", include_str!("../../assets/plugins/piratebay.js")),
+    ("torrents-csv.js", include_str!("../../assets/plugins/torrents-csv.js")),
+    ("limetorrents.js", include_str!("../../assets/plugins/limetorrents.js")),
+    ("bitsearch.js", include_str!("../../assets/plugins/bitsearch.js")),
+    ("nyaa.js", include_str!("../../assets/plugins/nyaa.js")),
     ("example.js", include_str!("../../assets/plugins/example.js")),
 ];
 

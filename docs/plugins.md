@@ -2,7 +2,22 @@
 
 Плагин — один `.js`-файл, который вызывает `definePlugin({...})`. Выполняется в изолированном QuickJS, **синхронно**: `ctx.http.get(...)` сразу возвращает ответ. Установка — в «Настройки → Трекеры и плагины».
 
-Встроенные: `torznab.js` (Jackett / Prowlarr), `internet-archive.js`, `example.js` (шаблон, показывающий весь API — удобно скопировать и изменить `id`).
+Встроенные:
+
+| Файл | Источник |
+|---|---|
+| `torznab.js` | Jackett / Prowlarr (нужен адрес и ключ) |
+| `internet-archive.js` | Internet Archive |
+| `piratebay.js` | The Pirate Bay (JSON API apibay.org) |
+| `torrents-csv.js` | torrents-csv.com |
+| `limetorrents.js` | LimeTorrents |
+| `bitsearch.js` | Bitsearch (бывший SolidTorrents) |
+| `nyaa.js` | Nyaa.si |
+| `example.js` | шаблон, показывающий весь API — удобно скопировать и изменить `id` |
+
+Плагины без обязательных настроек включены сразу. Пять из них (кроме Torznab, Internet Archive и шаблона) — порты официальных поисковых плагинов qBittorrent; EZTV, TorLock и 1337x не перенесены, так как закрыты Cloudflare, а TorrentProject не работает.
+
+Сайты меняют вёрстку и зеркала. Проверить плагины на реальных сайтах: `cargo test live_bundled_searches -- --ignored --nocapture`. Если сайту нужен «браузерный» клиент, передайте заголовок `User-Agent` через `ctx.http.get(url, { headers: {...} })`.
 
 ## Описание
 

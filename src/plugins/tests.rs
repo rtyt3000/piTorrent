@@ -376,10 +376,10 @@ fn bundled_plugins_load_and_can_be_installed_and_removed() {
     let mut m = Manager::load(dir.join("plugins"), store);
     assert!(m.failed.is_empty(), "{:?}", m.failed);
     let ids: Vec<_> = m.plugins.iter().map(|p| p.meta.id.as_str()).collect();
-    assert_eq!(ids, ["torznab", "internet-archive", "example"]);
+    assert_eq!(ids, ["torznab", "internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa", "example"]);
     // Only plugins that need nothing are searchable out of the box.
     let searchable: Vec<_> = m.searchable().iter().map(|p| p.meta.id.clone()).collect();
-    assert_eq!(searchable, ["internet-archive"]);
+    assert_eq!(searchable, ["internet-archive", "piratebay", "torrents-csv", "limetorrents", "bitsearch", "nyaa"]);
 
     let file = dir.join("mine.js");
     std::fs::write(&file, "definePlugin({ id: 'mine', name: 'Mine', search: function () { return []; } });").unwrap();
@@ -488,4 +488,46 @@ fn real_keyring_roundtrip() {
     secrets.set(plugin, key, None).unwrap();
     assert_eq!(secrets.get(plugin, key), None);
     secrets.set(plugin, key, None).unwrap(); // deleting twice is fine
+}
+
+/// Talks to the real sites, so it is skipped by default:
+/// `cargo test live_bundled_searches -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn live_bundled_searches() {
+    let mut failed = Vec::new();
+    for (name, src) in [
+        ("piratebay", include_str!("../../assets/plugins/piratebay.js")),
+        ("torrents-csv", include_str!("../../assets/plugins/torrents-csv.js")),
+        ("limetorrents", include_str!("../../assets/plugins/limetorrents.js")),
+        ("bitsearch", include_str!("../../assets/plugins/bitsearch.js")),
+        ("nyaa", include_str!("../../assets/plugins/nyaa.js")),
+    ] {
+        match plugin(src).search(Values::new(), "ubuntu", None, cancel()) {
+            Ok(r) if !r.is_empty() => {
+                println!("{name}: {} results", r.len());
+                println!("   {:?}", r[0]);
+            }
+            Ok(_) => failed.push(format!("{name}: found nothing")),
+            Err(e) => failed.push(format!("{name}: {e}")),
+        }
+    }
+    assert!(failed.is_empty(), "{failed:#?}");
+}
+
+/// Bitsearch is checked against a saved page (the site rate-limits), through a local server.
+#[test]
+fn bitsearch_page_is_parsed() {
+    let page = include_bytes!("fixtures/bitsearch.html");
+    let mock = Mock::new(vec![("/search", ok(page, "text/html"))]);
+    let src = include_str!("../../assets/plugins/bitsearch.js")
+        .replace("https://solidtorrents.to", &mock.url())
+        .replace("[\"solidtorrents.to\", \"bitsearch.to\"]", "[\"127.0.0.1\"]");
+    let r = plugin(&src).search(Values::new(), "ubuntu", None, cancel()).unwrap();
+    assert!(!r.is_empty());
+    let first = &r[0];
+    assert!(first.title.contains("ubuntu"), "{first:?}");
+    assert!(first.size.is_some() && first.seeders.is_some() && first.leechers.is_some(), "{first:?}");
+    assert!(first.magnet.as_deref().is_some_and(|m| m.starts_with("magnet:?xt=urn:btih:")), "{first:?}");
+    assert!(first.date.as_deref().is_some_and(|d| d.len() == 10), "{first:?}");
 }
