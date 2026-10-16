@@ -26,6 +26,10 @@ encoding_rs = "0.8"
 base64 = "0.22"
 keyring = "4"
 
+# The tray icon on Linux needs a GTK main loop (the version tray-icon uses).
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 

@@ -44,19 +44,25 @@ pub fn register() -> Result<(), String> {
     Ok(())
 }
 
-/// Writes a desktop entry and makes it the default handler through `xdg-mime`.
+/// Writes a desktop entry (with its icon) and makes it the default handler through `xdg-mime`.
+/// The file name matches the window's application id, so the shell can pair window and icon.
 #[cfg(target_os = "linux")]
 pub fn register() -> Result<(), String> {
     use std::process::Command;
 
+    let data = dirs::data_dir().ok_or("no data directory")?;
+    let icons = data.join("icons/hicolor/256x256/apps");
+    std::fs::create_dir_all(&icons).map_err(|e| e.to_string())?;
+    std::fs::write(icons.join("piTorrent.png"), include_bytes!("../assets/app_icon_256.png")).map_err(|e| e.to_string())?;
+
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe = exe.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
-    let dir = dirs::data_dir().ok_or("no data directory")?.join("applications");
+    let dir = data.join("applications");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let entry = format!(
         "[Desktop Entry]\nType=Application\nName=piTorrent\nComment=BitTorrent client\n\
-         Exec=\"{exe}\" %U\nTerminal=false\nCategories=Network;FileTransfer;P2P;\n\
-         MimeType=application/x-bittorrent;x-scheme-handler/magnet;\n"
+         Exec=\"{exe}\" %U\nIcon=piTorrent\nStartupWMClass=piTorrent\nTerminal=false\n\
+         Categories=Network;FileTransfer;P2P;\nMimeType=application/x-bittorrent;x-scheme-handler/magnet;\n"
     );
     std::fs::write(dir.join("piTorrent.desktop"), entry).map_err(|e| e.to_string())?;
 

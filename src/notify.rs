@@ -21,6 +21,8 @@ pub fn send(title: String, body: String) {
         n.summary(&title).body(&body);
         #[cfg(windows)]
         n.app_id(APP_ID);
+        #[cfg(not(windows))]
+        n.appname(APP_ID);
         let _ = n.show();
     });
 }

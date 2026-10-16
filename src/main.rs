@@ -75,6 +75,11 @@ fn window_settings(saved: Option<settings::WindowGeometry>) -> window::Settings 
         exit_on_close_request: false,
         decorations: false,
         icon: window::icon::from_rgba(app_icon::rgba(), app_icon::SIZE, app_icon::SIZE).ok(),
+        #[cfg(target_os = "linux")]
+        platform_specific: window::settings::PlatformSpecific {
+            application_id: "piTorrent".into(),
+            ..Default::default()
+        },
         ..Default::default()
     }
 }

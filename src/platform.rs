@@ -52,6 +52,20 @@ mod imp {
 #[cfg(not(windows))]
 mod imp {
     pub fn round_corners(_: &dyn iced::window::Window) {}
+
+    /// Gives freed heap memory back to the OS while the window sits in the tray (glibc only).
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    pub fn trim_memory() {
+        unsafe extern "C" {
+            fn malloc_trim(pad: usize) -> i32;
+        }
+        // SAFETY: takes no pointers and is safe to call at any time.
+        unsafe {
+            malloc_trim(0);
+        }
+    }
+
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
     pub fn trim_memory() {}
 }
 

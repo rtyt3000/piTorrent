@@ -21,6 +21,23 @@
 
 Нужен Rust с поддержкой edition 2024.
 
+### Linux
+
+Для сборки нужны компилятор C, `pkg-config` и dev-пакеты GTK 3 и libayatana-appindicator (для трея), например на Fedora:
+
+```sh
+sudo dnf install gcc pkgconf-pkg-config gtk3-devel libayatana-appindicator-gtk3-devel libxkbcommon-devel wayland-devel
+```
+
+На Debian/Ubuntu: `build-essential pkg-config libgtk-3-dev libayatana-appindicator3-dev libxkbcommon-dev libwayland-dev`.
+
+Что важно знать:
+
+- Трей работает через StatusNotifier/AppIndicator. В GNOME для него нужно расширение AppIndicator; без него значок не виден, поэтому там лучше отключить «Закрывать в трей».
+- Пароли плагинов хранятся в Secret Service (gnome-keyring, KWallet, KeePassXC).
+- Кнопка ассоциаций создаёт `~/.local/share/applications/piTorrent.desktop` с иконкой и вызывает `xdg-mime` (нужен пакет `xdg-utils`).
+- Окно без рамки, скруглённых углов и тени нет.
+
 ```sh
 cargo run --release
 cargo test
