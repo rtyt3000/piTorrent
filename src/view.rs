@@ -718,7 +718,9 @@ impl App {
                     Space::new().width((r.depth * 18) as f32),
                     checkbox(p, state, Msg::ToggleFile(r.idxs.clone())),
                     icon(if r.folder { Ico::Folder } else { Ico::File }, 15.0, p.mute),
-                    tx(r.name.clone(), 13.0, Color { a: fade, ..p.txt }),
+                    container(tx(r.name.clone(), 13.0, Color { a: fade, ..p.txt }).wrapping(iced::widget::text::Wrapping::None))
+                        .width(GROW)
+                        .clip(true),
                 ]
                 .spacing(8)
                 .align_y(Alignment::Center)
@@ -1093,8 +1095,12 @@ impl App {
                     Space::new().width((r.depth * 18) as f32),
                     checkbox(p, state, Msg::AddToggle(r.idxs.clone())),
                     icon(if r.folder { Ico::Folder } else { Ico::File }, 15.0, p.mute),
-                    tx(r.name.clone(), 13.0, Color { a: fade, ..p.txt }).width(GROW),
-                    mono(fmt::bytes(r.size), 12.0, Color { a: fade, ..p.txt2 }),
+                    container(tx(r.name.clone(), 13.0, Color { a: fade, ..p.txt }).wrapping(iced::widget::text::Wrapping::None))
+                        .width(GROW)
+                        .clip(true),
+                    mono(fmt::bytes(r.size), 12.0, Color { a: fade, ..p.txt2 })
+                        .width(76)
+                        .align_x(alignment::Horizontal::Right),
                 ]
                 .spacing(8)
                 .height(32)
