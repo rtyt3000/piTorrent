@@ -305,6 +305,8 @@ pub struct App {
     pub plugin_dialog: Option<PluginDialog>,
     pub motion: motion::Motion,
     /// The last click on a torrent row, to recognise a double click.
+    /// The search result whose .torrent is being fetched, so its button can show it.
+    pub adding: Option<usize>,
     pub last_click: Option<(usize, std::time::Instant)>,
 }
 
@@ -512,6 +514,7 @@ impl App {
             tracker_query: String::new(),
             plugin_dialog: None,
             motion: motion::Motion::new(),
+            adding: None,
             last_click: None,
         };
         (
@@ -1157,6 +1160,10 @@ impl App {
             Msg::SearchSelect(i) => self.sr.selected = Some(i),
             Msg::SearchAdd(i) => {
                 if let Some(r) = self.sr.results.get(i).cloned() {
+                    // Without a magnet link the file has to be fetched first, which takes a moment.
+                    let slow = r.magnet.is_none()
+                        && (r.torrent_url.is_some() || self.plugins.get(&r.plugin_id).is_some_and(|p| p.meta.has_resolve));
+                    self.adding = slow.then_some(i);
                     return self.add_result(r);
                 }
             }
@@ -1166,6 +1173,7 @@ impl App {
                 }
             }
             Msg::ResultResolved(Ok(res)) => {
+                self.adding = None;
                 if let Some(m) = res.magnet {
                     return self.update(Msg::OpenArg(m));
                 }
@@ -1181,8 +1189,12 @@ impl App {
                 }
                 self.notice = Some(tr("search.no_link"));
             }
-            Msg::ResultResolved(Err(e)) => self.notice = Some(e),
+            Msg::ResultResolved(Err(e)) => {
+                self.adding = None;
+                self.notice = Some(e);
+            }
             Msg::TorrentFetched(Ok(bytes)) => {
+                self.adding = None;
                 self.dialog = Some(Dialog::Add);
                 self.add.mode = AddMode::File;
                 self.add.folder = self.settings.download_dir.clone();
@@ -1190,7 +1202,10 @@ impl App {
                 self.add.category = None;
                 return self.open_torrent_file(bytes);
             }
-            Msg::TorrentFetched(Err(e)) => self.notice = Some(trf("search.fetch_failed", &[e])),
+            Msg::TorrentFetched(Err(e)) => {
+                self.adding = None;
+                self.notice = Some(trf("search.fetch_failed", &[e]));
+            }
             Msg::PluginEnable(id) => {
                 if let Some(pl) = self.plugins.get(&id) {
                     let on = self.plugins.store.is_enabled(&pl.meta);

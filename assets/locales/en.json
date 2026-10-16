@@ -222,6 +222,7 @@
   "search.summary": "Found: {} (sources: {})",
   "search.too_fast": "Wait a second between searches",
   "search.fetch_failed": "Could not get the torrent: {}",
+  "search.adding": "Adding…",
   "search.no_link": "This result has no link to add it by",
   "cat.movies": "Movies",
   "cat.tv": "TV",

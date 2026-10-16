@@ -204,10 +204,11 @@ impl App {
         .style(theme::row(p, on))
         .on_press(Msg::SearchSelect(i));
 
-        let add = button(tx(tr("action.add"), 12.0, p.acc_ink))
+        let busy = self.adding == Some(i);
+        let add = button(tx(tr(if busy { "search.adding" } else { "action.add" }), 12.0, p.acc_ink))
             .padding([5, 12])
-            .style(theme::primary(p))
-            .on_press(Msg::SearchAdd(i));
+            .style(theme::primary(p));
+        let add = if self.adding.is_some() { add } else { add.on_press(Msg::SearchAdd(i)) };
         let mut actions = row![add].spacing(4).align_y(Alignment::Center).width(W_ACTIONS - 12.0);
         if r.page_url.is_some() {
             actions = actions.push(icon_button(p, crate::icons::Ico::Link, Msg::SearchOpenPage(i), true));
