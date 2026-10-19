@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 pub const PIECE_CELLS: usize = 120;
 
@@ -139,7 +140,12 @@ pub struct Engine {
     default_dir: PathBuf,
     /// Magnet torrents that should be moved to this folder once their metadata is known.
     pending_moves: Mutex<HashMap<String, PathBuf>>,
+    /// Smoothed download speed per torrent, for an ETA that doesn't jump with every spike.
+    speeds: Mutex<HashMap<usize, (f64, Instant)>>,
 }
+
+/// How long (seconds) a speed sample keeps weighing on the average.
+const ETA_WINDOW: f64 = 30.0;
 
 /// Torrents are queued by pausing the lowest-priority ones above the limits; the ids paused by
 /// the queue (as opposed to by the user) are remembered so they can be resumed automatically.
@@ -256,6 +262,7 @@ impl Engine {
             backend,
             default_dir: PathBuf::from(&s.download_dir),
             pending_moves: Mutex::new(HashMap::new()),
+            speeds: Mutex::new(HashMap::new()),
             queue: Mutex::new(Queue {
                 max_downloads: s.max_downloads as usize,
                 max_seeds: s.max_seeds as usize,
@@ -281,7 +288,30 @@ impl Engine {
         let mut snap = self.backend.snapshot(selected, want_peers);
         self.start_pending_moves(&snap);
         self.rebalance(&mut snap).await;
+        self.smooth_eta(&mut snap);
         snap
+    }
+
+    /// Replaces the instantaneous ETA with one based on an exponential moving average of the speed.
+    fn smooth_eta(&self, snap: &mut Snapshot) {
+        let now = Instant::now();
+        let mut speeds = self.speeds.lock().unwrap();
+        speeds.retain(|id, _| snap.torrents.iter().any(|t| t.id == *id && t.state == State::Downloading));
+        for t in snap.torrents.iter_mut().filter(|t| t.state == State::Downloading) {
+            let cur = t.down_bps as f64;
+            let avg = match speeds.get(&t.id) {
+                Some(&(avg, at)) => {
+                    let k = 1.0 - (-now.duration_since(at).as_secs_f64() / ETA_WINDOW).exp();
+                    avg + (cur - avg) * k
+                }
+                // Don't start from zero: the first sample is all there is.
+                None if cur > 0.0 => cur,
+                None => continue,
+            };
+            speeds.insert(t.id, (avg, now));
+            let left = t.total.saturating_sub(t.progress);
+            t.eta = (avg >= 1.0 && left > 0).then(|| (left as f64 / avg) as u64);
+        }
     }
 
     fn start_pending_moves(self: &Arc<Self>, snap: &Snapshot) {
@@ -525,6 +555,7 @@ mod tests {
             backend: Box::new(fake.clone()),
             default_dir: PathBuf::new(),
             pending_moves: Mutex::new(HashMap::new()),
+            speeds: Mutex::new(HashMap::new()),
             queue: Mutex::new(Queue {
                 max_downloads: downloads,
                 max_seeds: seeds,
