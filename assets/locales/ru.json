@@ -58,7 +58,7 @@
   "settings.light": "Светлая",
   "settings.appearance": "Внешний вид",
   "settings.theme": "Тема",
-  "settings.theme.hint": "Тёмная или светлая, как в IDE",
+  "settings.theme.hint": "Тёмная или светлая",
   "settings.language": "Язык",
   "settings.language.hint": "Язык интерфейса",
   "settings.language.auto": "Авто",

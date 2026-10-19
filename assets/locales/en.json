@@ -58,7 +58,7 @@
   "settings.light": "Light",
   "settings.appearance": "Appearance",
   "settings.theme": "Theme",
-  "settings.theme.hint": "Dark or light, like in an IDE",
+  "settings.theme.hint": "Dark or light",
   "settings.language": "Language",
   "settings.language.hint": "Interface language",
   "settings.language.auto": "Auto",
