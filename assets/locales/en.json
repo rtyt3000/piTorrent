@@ -207,7 +207,7 @@
   "peer.not_needed": "Not needed",
   "add.link_paste": "Paste",
   "add.fetch": "Get file list",
-  "add.fetching": "Fetching metadata, this can take up to a minute…",
+  "add.fetching": "Fetching metadata, you can add the torrent now without waiting.",
   "add.fetch_failed": "Could not get the metadata: {}",
   "add.multi": "Several links are added at once, without choosing files.",
   "search.placeholder_trackers": "Search trackers: type a query and press Enter",

@@ -3,7 +3,7 @@ use librqbit::api::{Api, TorrentIdOrHash};
 use librqbit::limits::LimitsConfig;
 use librqbit::spawn_utils::BlockingSpawner;
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, CreateTorrentOptions, Magnet, ListenerMode, ListenerOptions, Session,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, CreateTorrentOptions, Magnet, PeerConnectionOptions, ListenerMode, ListenerOptions, Session,
     SessionOptions, SessionPersistenceConfig, TorrentStatsState, create_torrent,
 };
 use std::net::{Ipv4Addr, SocketAddr};
@@ -56,6 +56,19 @@ fn move_files(from: &Path, to: &Path, files: &[Vec<String>], remove_root: bool) 
     Ok(())
 }
 
+/// Public trackers added to every torrent: many magnet links carry none, and DHT alone
+/// is slow to find peers for big or rarely-seeded torrents.
+const DEFAULT_TRACKERS: &[&str] = &[
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://exodus.desync.com:6969/announce",
+    "udp://open.demonii.com:1337/announce",
+    "udp://tracker.tiny-vps.com:6969/announce",
+    "udp://explodie.org:6969/announce",
+    "udp://tracker.dler.org:6969/announce",
+];
+
 fn limit(mb: u32) -> Option<NonZeroU32> {
     NonZeroU32::new(mb.saturating_mul(1024 * 1024))
 }
@@ -73,6 +86,18 @@ impl RqbitBackend {
                 mode: ListenerMode::TcpAndUtp,
                 listen_addr: SocketAddr::from((Ipv4Addr::UNSPECIFIED, s.port)),
                 enable_upnp_port_forwarding: true,
+                ..Default::default()
+            }),
+            trackers: DEFAULT_TRACKERS.iter().filter_map(|t| t.parse().ok()).collect(),
+            peer_limit: Some(500),
+            // Peers of busy swarms are slow to answer; the 10 s defaults drop many of them
+            // while the (large) metadata is still being fetched.
+            connect: Some(ConnectionOptions {
+                peer_opts: Some(PeerConnectionOptions {
+                    connect_timeout: Some(Duration::from_secs(20)),
+                    read_write_timeout: Some(Duration::from_secs(60)),
+                    keep_alive_interval: None,
+                }),
                 ..Default::default()
             }),
             ratelimits: LimitsConfig {
@@ -284,7 +309,7 @@ impl Backend for RqbitBackend {
     }
 
     async fn preview_magnet(&self, link: String) -> Result<MagnetPreview, String> {
-        const TIMEOUT: Duration = Duration::from_secs(90);
+        const TIMEOUT: Duration = Duration::from_secs(300);
         let trackers = Magnet::parse(&link).map_err(|e| e.to_string())?.trackers;
         let opts = AddTorrentOptions { list_only: true, ..Default::default() };
         let added = tokio::time::timeout(TIMEOUT, self.session.add_torrent(AddTorrent::from_url(link), Some(opts)))

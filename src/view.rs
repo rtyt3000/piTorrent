@@ -1071,7 +1071,8 @@ impl App {
                 } else {
                     Space::new().into()
                 };
-                ready = a.preview.is_none() && !links.is_empty() && !a.fetching;
+                // Adding doesn't wait for the metadata: the engine fetches it itself.
+                ready = a.preview.is_none() && !links.is_empty();
                 body = body.push(
                     column![
                         tx(tr("add.magnets"), 12.0, p.mute),
