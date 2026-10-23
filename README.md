@@ -1,5 +1,7 @@
 # piTorrent
 
+[![Release](https://github.com/rtyt3000/piTorrent/actions/workflows/release.yml/badge.svg)](https://github.com/rtyt3000/piTorrent/actions/workflows/release.yml)
+
 ![assent/screenshot.png](assets/screenshot.png)
 
 Лёгкий настольный BitTorrent-клиент на Rust с поиском по трекерам через JavaScript-плагины.
