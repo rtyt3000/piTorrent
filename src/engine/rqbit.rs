@@ -178,7 +178,15 @@ impl RqbitBackend {
         };
 
         let cells = match self.api.api_dump_haves(idx) {
-            Ok((bf, total)) if total > 0 => cells_from_bitfield(|k| bf.get(k).map(|x| *x).unwrap_or(false), total as usize),
+            Ok((bf, total)) if total > 0 => {
+                // Without the selection every piece counts as wanted.
+                let wanted = self.api.api_dump_selected(idx).ok();
+                cells_from_bitfield(
+                    |k| bf.get(k).map(|x| *x).unwrap_or(false),
+                    |k| wanted.as_ref().is_none_or(|w| w.get(k).map(|x| *x).unwrap_or(true)),
+                    total as usize,
+                )
+            }
             _ => {
                 let frac = torrents
                     .iter()
@@ -450,16 +458,26 @@ impl Backend for RqbitBackend {
     }
 }
 
-fn cells_from_bitfield(have_at: impl Fn(usize) -> bool, total: usize) -> Vec<f32> {
-    (0..PIECE_CELLS)
+/// One cell per piece up to `PIECE_CELLS`, then pieces are grouped. A cell holds the share of its
+/// wanted pieces that are downloaded, or `SKIPPED` when none of them is wanted.
+fn cells_from_bitfield(have_at: impl Fn(usize) -> bool, wanted_at: impl Fn(usize) -> bool, total: usize) -> Vec<f32> {
+    let cells = total.min(PIECE_CELLS);
+    (0..cells)
         .map(|i| {
-            let a = i * total / PIECE_CELLS;
-            let b = (((i + 1) * total / PIECE_CELLS).max(a + 1)).min(total);
-            if a >= b {
-                return 0.0;
+            let a = i * total / cells;
+            let b = (((i + 1) * total / cells).max(a + 1)).min(total);
+            let (mut wanted, mut have) = (0, 0);
+            for k in a..b {
+                if wanted_at(k) {
+                    wanted += 1;
+                    have += have_at(k) as usize;
+                } else if have_at(k) {
+                    // A piece shared with a neighbouring selected file can already be here.
+                    wanted += 1;
+                    have += 1;
+                }
             }
-            let have = (a..b).filter(|&k| have_at(k)).count();
-            have as f32 / (b - a) as f32
+            if wanted == 0 { SKIPPED } else { have as f32 / wanted as f32 }
         })
         .collect()
 }
@@ -467,6 +485,23 @@ fn cells_from_bitfield(have_at: impl Fn(usize) -> bool, total: usize) -> Vec<f32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn piece_cells_are_exact_for_small_torrents_and_mark_skipped_pieces() {
+        let cells = cells_from_bitfield(|k| k < 10, |k| k < 20, 40);
+        assert_eq!(cells.len(), 40);
+        assert_eq!(cells[0], 1.0);
+        assert_eq!(cells[15], 0.0);
+        assert_eq!(cells[30], SKIPPED);
+    }
+
+    #[test]
+    fn piece_cells_group_pieces_of_big_torrents() {
+        let cells = cells_from_bitfield(|k| k < 5000, |_| true, 10_000);
+        assert_eq!(cells.len(), PIECE_CELLS);
+        assert_eq!(cells[0], 1.0);
+        assert_eq!(cells[PIECE_CELLS - 1], 0.0);
+    }
 
     fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("piTorrent-test-{name}-{}", std::process::id()));

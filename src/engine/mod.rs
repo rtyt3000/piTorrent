@@ -12,7 +12,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-pub const PIECE_CELLS: usize = 120;
+/// The piece map has one cell per piece up to this many (two rows); bigger torrents group pieces.
+pub const PIECE_CELLS: usize = 128;
+/// Cell value for pieces nobody asked for (they belong to deselected files).
+pub const SKIPPED: f32 = -1.0;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum State {
@@ -68,7 +71,7 @@ pub struct Detail {
     pub id: usize,
     pub files: Vec<FileInfo>,
     pub peers: Vec<PeerInfo>,
-    /// Share of downloaded pieces for each of `PIECE_CELLS` cells of the piece map (0..=1).
+    /// Share of wanted pieces downloaded for each cell of the piece map (0..=1, or `SKIPPED`).
     pub cells: Vec<f32>,
 }
 

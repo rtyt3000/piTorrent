@@ -511,6 +511,16 @@ impl Api {
         )
     }
 
+    /// Pieces that are wanted, i.e. belong to a selected file.
+    pub fn api_dump_selected(&self, idx: TorrentIdOrHash) -> Result<BF> {
+        let mgr = self.mgr_handle(idx)?;
+        mgr.with_chunk_tracker(|chunks| chunks.get_selected_pieces().clone())
+            .with_status_error(
+                StatusCode::PRECONDITION_FAILED,
+                crate::Error::TorrentIsNotLive,
+            )
+    }
+
     pub async fn api_stream(&self, idx: TorrentIdOrHash, file_id: usize) -> Result<FileStream> {
         let mgr = self.mgr_handle(idx)?;
         Ok(mgr.stream(file_id).await?)

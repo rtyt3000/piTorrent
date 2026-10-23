@@ -1,4 +1,4 @@
-use crate::engine::{Detail, PIECE_CELLS, PriorityMove, State, TorrentInfo};
+use crate::engine::{Detail, PIECE_CELLS, PriorityMove, SKIPPED, State, TorrentInfo};
 use crate::icons::{Ico, chevron, icon};
 use crate::settings::Backdrop;
 use crate::theme::{self, Mode, Palette};
@@ -711,20 +711,29 @@ impl App {
         }
 
         let color = state_color(p, t.state);
-        let cells: Vec<f32> = d.map(|d| d.cells.clone()).unwrap_or_else(|| vec![0.0; PIECE_CELLS]);
-        let mut map = column![].spacing(2);
-        for line in cells.chunks(PIECE_CELLS / 2) {
-            map = map.push(row(line.iter().map(|&f| {
-                let c = if f >= 0.999 {
+        const ROW: usize = PIECE_CELLS / 2;
+        let cells: Vec<f32> = d.map(|d| d.cells.clone()).unwrap_or_else(|| vec![0.0; ROW]);
+        let (gap, cell_h) = (2.0, 10.0);
+        let mut map = column![].spacing(gap);
+        for line in cells.chunks(ROW) {
+            let mut r = row(line.iter().map(|&f| {
+                let c = if f == SKIPPED {
+                    p.line
+                } else if f >= 0.999 {
                     color
                 } else if f <= 0.0 {
                     p.track
                 } else {
                     Color { r: p.track.r + (color.r - p.track.r) * f, g: p.track.g + (color.g - p.track.g) * f, b: p.track.b + (color.b - p.track.b) * f, a: 1.0 }
                 };
-                container(Space::new()).width(GROW).height(10).style(theme::fill(c, 2.0)).into()
+                container(Space::new()).width(GROW).height(cell_h).style(theme::fill(c, 2.0)).into()
             }))
-            .spacing(2));
+            .spacing(gap);
+            // A short last row keeps the width of its cells.
+            for _ in line.len()..ROW.min(cells.len()) {
+                r = r.push(Space::new().width(GROW));
+            }
+            map = map.push(r);
         }
         let pct = fmt::percent(t.progress, t.total);
         let caption = trf("pieces.caption", &[plural(t.pieces as usize, "pieces"), format!("{pct:.0}")]);
