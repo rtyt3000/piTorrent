@@ -2,10 +2,33 @@ use crate::icons::{Ico, icon};
 use crate::theme::{self, Palette};
 use iced::widget::{Space, button, column, container, row, text};
 use iced::font::{Family, Weight};
+use std::sync::OnceLock;
 use iced::{Color, Element, Font, Length, alignment};
 
-pub const SANS: Font = Font::with_name("Geist");
-pub const MONO: Font = Font::with_name("Geist Mono");
+static SANS_NAME: OnceLock<&'static str> = OnceLock::new();
+
+/// Picks the UI font family; only takes effect when called before the first `sans()`.
+pub fn set_sans(name: &str) {
+    let _ = SANS_NAME.set(Box::leak(name.to_owned().into_boxed_str()));
+}
+
+fn sans_name() -> &'static str {
+    SANS_NAME.get().copied().unwrap_or("Geist")
+}
+
+pub fn sans() -> Font {
+    Font::with_name(sans_name())
+}
+static MONO_NAME: OnceLock<&'static str> = OnceLock::new();
+
+/// Picks the monospace family; only takes effect when called before the first `mono_font()`.
+pub fn set_mono(name: &str) {
+    let _ = MONO_NAME.set(Box::leak(name.to_owned().into_boxed_str()));
+}
+
+pub fn mono_font() -> Font {
+    Font::with_name(MONO_NAME.get().copied().unwrap_or("Geist Mono"))
+}
 
 /// Global text scale; every font size in the UI goes through `fs`.
 pub const UI_SCALE: f32 = 1.15;
@@ -19,12 +42,12 @@ pub fn tx<'a>(s: impl Into<String>, size: f32, color: Color) -> iced::widget::Te
 }
 
 pub fn mono<'a>(s: impl Into<String>, size: f32, color: Color) -> iced::widget::Text<'a> {
-    tx(s, size, color).font(MONO)
+    tx(s, size, color).font(mono_font())
 }
 
 pub fn semibold<'a>(s: impl Into<String>, size: f32, color: Color) -> iced::widget::Text<'a> {
     tx(s, size, color).font(Font {
-        family: Family::Name("Geist"),
+        family: Family::Name(sans_name()),
         weight: Weight::Semibold,
         ..Font::DEFAULT
     })

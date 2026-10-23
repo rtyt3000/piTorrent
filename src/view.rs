@@ -1,5 +1,6 @@
 use crate::engine::{Detail, PIECE_CELLS, PriorityMove, State, TorrentInfo};
 use crate::icons::{Ico, chevron, icon};
+use crate::settings::Backdrop;
 use crate::theme::{self, Mode, Palette};
 use crate::i18n::{Language, plural, tr, trf};
 use crate::widgets::*;
@@ -844,8 +845,12 @@ impl App {
     // ---------- настройки ----------
 
     fn settings_island(&self, p: Palette) -> El<'_> {
-        let tabs = [(SettingsTab::Main, tr("settings.tab.main")), (SettingsTab::Trackers, tr("settings.tab.trackers"))]
-            .into_iter()
+        let tabs = [
+            (SettingsTab::Main, tr("settings.tab.main")),
+            (SettingsTab::Appearance, tr("settings.tab.appearance")),
+            (SettingsTab::Trackers, tr("settings.tab.trackers")),
+        ]
+        .into_iter()
             .map(|(t, label)| {
                 let on = self.stab == t;
                 button(tx(label, 13.0, if on { p.txt } else { p.txt2 }))
@@ -860,6 +865,7 @@ impl App {
             .align_y(Alignment::Center);
         let body = match self.stab {
             SettingsTab::Main => self.settings_main(p),
+            SettingsTab::Appearance => self.settings_appearance(p),
             SettingsTab::Trackers => self.settings_plugins(p),
         };
         container(column![head, hline(p), scrollable(body).height(GROW)])
@@ -869,7 +875,7 @@ impl App {
             .into()
     }
 
-    fn settings_main(&self, p: Palette) -> El<'_> {
+    fn settings_appearance(&self, p: Palette) -> El<'_> {
         let s = &self.settings;
         let theme_seg = segmented(
             p,
@@ -878,31 +884,63 @@ impl App {
                 (tr("settings.light").into(), s.theme == Mode::Light, Msg::SetTheme(Mode::Light)),
             ],
         );
+        let backdrop_seg = segmented(
+            p,
+            vec![
+                (tr("settings.backdrop.none").into(), s.backdrop == Backdrop::None, Msg::SetBackdrop(Backdrop::None)),
+                (tr("settings.backdrop.mica").into(), s.backdrop == Backdrop::Mica, Msg::SetBackdrop(Backdrop::Mica)),
+                (tr("settings.backdrop.acrylic").into(), s.backdrop == Backdrop::Acrylic, Msg::SetBackdrop(Backdrop::Acrylic)),
+            ],
+        );
+        let opacity: El = row![
+            iced::widget::slider(0.3..=1.0, s.opacity, Msg::SetOpacity).step(0.01_f32).width(150),
+            tx(format!("{}%", (s.opacity * 100.0).round()), 12.0, p.mute),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center)
+        .into();
         let lang_seg: El = pick_list(Language::ALL, Some(s.language), Msg::SetLanguage)
             .text_size(fs(13.0))
             .style(theme::pick(p))
             .menu_style(theme::pick_menu(p))
             .width(170)
             .into();
+        let current = self.skins.iter().find(|k| Some(k.name.as_str()) == s.skin.as_deref()).or(self.skins.first()).cloned();
+        let skin_pick: El = pick_list(self.skins.clone(), current, Msg::SetSkin)
+            .text_size(fs(13.0))
+            .style(theme::pick(p))
+            .menu_style(theme::pick_menu(p))
+            .width(170)
+            .into();
+        column![group(
+            p,
+            tr("settings.appearance"),
+            vec![
+                setting(p, tr("settings.skin"), tr("settings.skin.hint"), skin_pick, true),
+                setting(p, tr("settings.theme"), tr("settings.theme.hint"), theme_seg, true),
+                setting(p, tr("settings.opacity"), tr("settings.opacity.hint"), opacity, true),
+                setting(p, tr("settings.backdrop"), tr("settings.backdrop.hint"), backdrop_seg, true),
+                setting(p, tr("settings.language"), tr("settings.language.hint"), lang_seg, false),
+            ]
+        )]
+        .padding([16, 20])
+        .max_width(560)
+        .into()
+    }
+
+    fn settings_main(&self, p: Palette) -> El<'_> {
+        let s = &self.settings;
         let field = |value: String, w: f32, f: fn(String) -> Msg| -> El<'_> {
             text_input("", &value)
                 .on_input(f)
                 .size(fs(12.0))
-                .font(MONO)
+                .font(mono_font())
                 .padding([6, 10])
                 .width(w)
                 .style(theme::input(p))
                 .into()
         };
         let left = column![
-            group(
-                p,
-                tr("settings.appearance"),
-                vec![
-                    setting(p, tr("settings.theme"), tr("settings.theme.hint"), theme_seg, true),
-                    setting(p, tr("settings.language"), tr("settings.language.hint"), lang_seg, false),
-                ]
-            ),
             group(
                 p,
                 tr("settings.downloads"),
@@ -989,7 +1027,7 @@ impl App {
             text_input(&placeholder, value)
                 .on_input(f)
                 .size(fs(12.0))
-                .font(MONO)
+                .font(mono_font())
                 .padding([6, 10])
                 .style(theme::input(p))
         };
@@ -1136,7 +1174,7 @@ impl App {
                             .placeholder("magnet:?xt=urn:btih:…")
                             .on_action(Msg::Magnets)
                             .size(fs(12.0))
-                            .font(MONO)
+                            .font(mono_font())
                             .wrapping(iced::widget::text::Wrapping::Glyph)
                             .padding([8, 10])
                             .height(84)
@@ -1228,7 +1266,7 @@ impl App {
                     text_input("", &a.folder)
                         .on_input(Msg::AddFolder)
                         .size(fs(12.0))
-                        .font(MONO)
+                        .font(mono_font())
                         .padding([6, 10])
                         .style(theme::input(p)),
                 ]
@@ -1248,7 +1286,7 @@ impl App {
             text_input(&tr("create.path.placeholder"), &c.path)
                 .on_input(Msg::CreatePath)
                 .size(fs(12.0))
-                .font(MONO)
+                .font(mono_font())
                 .padding([6, 10])
                 .width(GROW)
                 .style(theme::input(p)),
@@ -1274,7 +1312,7 @@ impl App {
                     .placeholder("https://tracker.example.org/announce")
                     .on_action(Msg::Trackers)
                     .size(fs(12.0))
-                    .font(MONO)
+                    .font(mono_font())
                     .height(72)
                     .style(theme::editor(p)),
             ]
@@ -1354,7 +1392,7 @@ impl App {
                     text_input("", &self.move_path)
                         .on_input(Msg::MovePath)
                         .size(fs(12.0))
-                        .font(MONO)
+                        .font(mono_font())
                         .padding([6, 10])
                         .width(GROW)
                         .style(theme::input(p)),

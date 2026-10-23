@@ -2,6 +2,7 @@
 
 #[cfg(windows)]
 mod imp {
+    use crate::settings::Backdrop;
     use iced::window::Window;
     use raw_window_handle::RawWindowHandle;
     use std::ffi::c_void;
@@ -23,6 +24,31 @@ mod imp {
         // SAFETY: both calls take no pointers; (-1, -1) is the documented way to trim.
         unsafe {
             SetProcessWorkingSetSize(GetCurrentProcess(), usize::MAX, usize::MAX);
+        }
+    }
+
+    const DWMWA_SYSTEMBACKDROP_TYPE: u32 = 38;
+
+    /// Mica / acrylic behind the window (Windows 11 22H2+; a no-op on older versions).
+    pub fn set_backdrop(window: &dyn Window, backdrop: Backdrop) {
+        let Ok(handle) = window.window_handle() else {
+            return;
+        };
+        if let RawWindowHandle::Win32(h) = handle.as_raw() {
+            let kind: u32 = match backdrop {
+                Backdrop::None => 1,
+                Backdrop::Mica => 2,
+                Backdrop::Acrylic => 3,
+            };
+            // SAFETY: the HWND belongs to our live window and the value outlives the call.
+            unsafe {
+                DwmSetWindowAttribute(
+                    h.hwnd.get(),
+                    DWMWA_SYSTEMBACKDROP_TYPE,
+                    &kind as *const u32 as *const c_void,
+                    size_of::<u32>() as u32,
+                );
+            }
         }
     }
 
@@ -53,6 +79,8 @@ mod imp {
 mod imp {
     pub fn round_corners(_: &dyn iced::window::Window) {}
 
+    pub fn set_backdrop(_: &dyn iced::window::Window, _: crate::settings::Backdrop) {}
+
     /// Gives freed heap memory back to the OS while the window sits in the tray (glibc only).
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     pub fn trim_memory() {
@@ -69,4 +97,4 @@ mod imp {
     pub fn trim_memory() {}
 }
 
-pub use imp::{round_corners, trim_memory};
+pub use imp::{round_corners, set_backdrop, trim_memory};

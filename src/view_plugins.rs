@@ -388,7 +388,7 @@ impl App {
                         .on_input(move |v| Msg::PluginField(key.clone(), v))
                         .secure(f.is_secret())
                         .size(fs(12.0))
-                        .font(MONO)
+                        .font(mono_font())
                         .padding([6, 10])
                         .style(theme::input(p))
                         .into()

@@ -3,6 +3,7 @@ use iced::overlay::menu;
 use iced::widget::{button, container, pick_list, progress_bar, text_editor, text_input};
 use iced::{Background, Border, Color, Shadow, Theme};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub enum Mode {
@@ -105,6 +106,46 @@ impl Palette {
         }
     }
 
+    /// Overrides one colour by its field name; returns false for an unknown name.
+    pub fn set(&mut self, key: &str, c: Color) -> bool {
+        let slot = match key {
+            "bg" => &mut self.bg,
+            "isl" => &mut self.isl,
+            "ibd" => &mut self.ibd,
+            "elev" => &mut self.elev,
+            "line" => &mut self.line,
+            "bd" => &mut self.bd,
+            "hov" => &mut self.hov,
+            "act" => &mut self.act,
+            "sel" => &mut self.sel,
+            "txt" => &mut self.txt,
+            "txt2" => &mut self.txt2,
+            "mute" => &mut self.mute,
+            "faint" => &mut self.faint,
+            "acc" => &mut self.acc,
+            "acc_ink" => &mut self.acc_ink,
+            "acc_hov" => &mut self.acc_hov,
+            "dl" => &mut self.dl,
+            "seed" => &mut self.seed,
+            "pause" => &mut self.pause,
+            "err" => &mut self.err,
+            "track" => &mut self.track,
+            "input" => &mut self.input,
+            "off" => &mut self.off,
+            _ => return false,
+        };
+        *slot = c;
+        true
+    }
+
+    /// Makes the big surfaces see-through; text, accents and borders stay opaque.
+    pub fn translucent(mut self, alpha: f32) -> Self {
+        for c in [&mut self.bg, &mut self.isl, &mut self.elev, &mut self.input] {
+            c.a *= alpha;
+        }
+        self
+    }
+
     pub fn iced_theme(&self) -> Theme {
         Theme::custom(
             "piTorrent".to_string(),
@@ -120,7 +161,19 @@ impl Palette {
     }
 }
 
+static RADIUS_SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000); // 1.0f32
+
+/// Scales every corner radius of the interface (a theme's "roundness").
+pub fn set_radius_scale(scale: f32) {
+    RADIUS_SCALE.store(scale.clamp(0.0, 2.0).to_bits(), Ordering::Relaxed);
+}
+
 fn border(color: Color, width: f32, radius: f32) -> Border {
+    exact_border(color, width, radius * f32::from_bits(RADIUS_SCALE.load(Ordering::Relaxed)))
+}
+
+/// For pills and dots, whose shape must not change with the theme's roundness.
+fn exact_border(color: Color, width: f32, radius: f32) -> Border {
     Border {
         color,
         width,
@@ -190,7 +243,7 @@ pub fn input_box(p: Palette) -> impl Fn(&Theme) -> container::Style {
 pub fn fill(color: Color, radius: f32) -> impl Fn(&Theme) -> container::Style {
     move |_| container::Style {
         background: Some(Background::Color(color)),
-        border: border(Color::TRANSPARENT, 0.0, radius),
+        border: exact_border(Color::TRANSPARENT, 0.0, radius),
         ..Default::default()
     }
 }
@@ -292,7 +345,7 @@ pub fn switch_track(p: Palette, on: bool) -> impl Fn(&Theme, button::Status) -> 
         btn(
             Some(if on { p.acc } else { p.off }),
             p.txt,
-            border(Color::TRANSPARENT, 0.0, 10.0),
+            exact_border(Color::TRANSPARENT, 0.0, 10.0),
         )
     }
 }
@@ -345,7 +398,7 @@ pub fn bar(p: Palette, color: Color) -> impl Fn(&Theme) -> progress_bar::Style {
     move |_| progress_bar::Style {
         background: Background::Color(p.track),
         bar: Background::Color(color),
-        border: border(Color::TRANSPARENT, 0.0, 3.0),
+        border: exact_border(Color::TRANSPARENT, 0.0, 3.0),
     }
 }
 

@@ -18,6 +18,7 @@ mod motion;
 mod settings;
 mod single_instance;
 mod theme;
+mod themes;
 mod tray;
 mod view;
 mod view_plugins;
@@ -47,22 +48,42 @@ fn main() -> iced::Result {
         return Ok(());
     }
     notify::init();
+    let saved = Settings::load();
+    let skins = themes::load_all();
+    if let Some(skin) = skin_of(&skins, &saved) {
+        if let Some(font) = &skin.font {
+            widgets::set_sans(font);
+        }
+        if let Some(font) = &skin.mono_font {
+            widgets::set_mono(font);
+        }
+    }
     // The app runs as a daemon: the window is opened (and, when sent to the tray, really closed)
     // by `App`, so the graphics stack is freed while nobody looks at it.
     iced::daemon(App::new, App::update, view_window)
         .title(|_: &App, _| "piTorrent".to_string())
         .subscription(App::subscription)
         .theme(|app: &App, _| app.theme())
+        .style(|_: &App, theme| iced::theme::Style {
+            // Clear to nothing: the surfaces paint their own (possibly see-through) backgrounds.
+            background_color: iced::Color::TRANSPARENT,
+            text_color: theme.palette().text,
+        })
         .font(include_bytes!("../assets/fonts/Geist-Regular.ttf").as_slice())
         .font(include_bytes!("../assets/fonts/Geist-Medium.ttf").as_slice())
         .font(include_bytes!("../assets/fonts/Geist-SemiBold.ttf").as_slice())
         .font(include_bytes!("../assets/fonts/GeistMono-Regular.ttf").as_slice())
-        .default_font(widgets::SANS)
+        .default_font(widgets::sans())
         .run()
 }
 
 fn view_window(app: &App, _window: window::Id) -> view::El<'_> {
     app.view()
+}
+
+fn skin_of<'a>(skins: &'a [themes::Skin], s: &Settings) -> Option<&'a themes::Skin> {
+    let name = s.skin.as_deref()?;
+    skins.iter().find(|k| k.name == name)
 }
 
 fn window_settings(saved: Option<settings::WindowGeometry>) -> window::Settings {
@@ -74,6 +95,7 @@ fn window_settings(saved: Option<settings::WindowGeometry>) -> window::Settings 
         position: saved.map_or(window::Position::Centered, |g| window::Position::Specific(iced::Point::new(g.x, g.y))),
         exit_on_close_request: false,
         decorations: false,
+        transparent: true,
         icon: window::icon::from_rgba(app_icon::rgba(), app_icon::SIZE, app_icon::SIZE).ok(),
         #[cfg(target_os = "linux")]
         platform_specific: window::settings::PlatformSpecific {
@@ -152,6 +174,7 @@ pub enum DetailTab {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SettingsTab {
     Main,
+    Appearance,
     Trackers,
 }
 
@@ -296,6 +319,7 @@ pub struct PluginDialog {
 pub struct App {
     pub engine: Option<Shared>,
     pub settings: Settings,
+    pub skins: Vec<themes::Skin>,
     pub snap: Snapshot,
     pub view: View,
     pub filter: Filter,
@@ -403,6 +427,9 @@ pub enum Msg {
     SeedNowToggle,
     ConfirmCreate,
     SetTheme(Mode),
+    SetSkin(themes::Skin),
+    SetOpacity(f32),
+    SetBackdrop(settings::Backdrop),
     SetLanguage(Language),
     TrayToggle,
     AutostartToggle,
@@ -498,6 +525,8 @@ impl App {
         if settings.autostart {
             let _ = autostart::set(true);
         }
+        let skins = themes::load_all();
+        theme::set_radius_scale(skin_of(&skins, &settings).and_then(|k| k.radius).unwrap_or(1.0));
         let start = settings.clone();
         let app = App {
             engine: None,
@@ -528,6 +557,7 @@ impl App {
                 busy: false,
             },
             settings,
+            skins,
             snap: Snapshot::default(),
             view: View::Torrents,
             filter: Filter::All,
@@ -585,6 +615,9 @@ impl App {
     fn open_window(&mut self) -> Task<Msg> {
         let (id, open) = window::open(window_settings(self.settings.window));
         self.window = Some(id);
+        // The old window died under the cursor, so no "mouse left" ever arrived for the close button.
+        self.close_hover = false;
+        self.close_hold = None;
         self.motion.hidden = false;
         open.map(Msg::WindowOpened)
     }
@@ -595,7 +628,15 @@ impl App {
     }
 
     pub fn palette(&self) -> Palette {
-        Palette::of(self.settings.theme)
+        let mode = self.settings.theme;
+        let base = Palette::of(mode);
+        let base = skin_of(&self.skins, &self.settings).map_or(base, |k| k.paint(base, mode));
+        base.translucent(self.settings.opacity.clamp(0.3, 1.0))
+    }
+
+    fn apply_backdrop(&self) -> Task<Msg> {
+        let backdrop = self.settings.backdrop;
+        self.on_window(|id| window::run(id, move |w| platform::set_backdrop(w, backdrop)).discard())
     }
 
     fn theme(&self) -> Theme {
@@ -1088,7 +1129,40 @@ impl App {
                     .collect();
                 return Task::batch(tasks.into_iter().chain(opens));
             }
-            Msg::WindowOpened(id) => return window::run(id, platform::round_corners).discard(),
+            Msg::WindowOpened(id) => {
+                let backdrop = self.settings.backdrop;
+                return window::run(id, move |w| {
+                    platform::round_corners(w);
+                    platform::set_backdrop(w, backdrop);
+                })
+                .discard();
+            }
+            Msg::SetSkin(k) => {
+                if let Some(m) = k.mode() {
+                    self.settings.theme = m;
+                }
+                theme::set_radius_scale(k.radius.unwrap_or(1.0));
+                if let Some(a) = k.opacity {
+                    self.settings.opacity = a.clamp(0.3, 1.0);
+                }
+                let backdrop = k.backdrop();
+                self.settings.skin = Some(k.name).filter(|n| n != themes::DEFAULT);
+                self.settings.save();
+                if let Some(b) = backdrop {
+                    self.settings.backdrop = b;
+                    self.settings.save();
+                    return self.apply_backdrop();
+                }
+            }
+            Msg::SetOpacity(a) => {
+                self.settings.opacity = a.clamp(0.3, 1.0);
+                self.settings.save();
+            }
+            Msg::SetBackdrop(b) => {
+                self.settings.backdrop = b;
+                self.settings.save();
+                return self.apply_backdrop();
+            }
             Msg::WindowDrag => return self.on_window(window::drag),
             Msg::WindowMinimize => {
                 self.trim_after = Some(std::time::Instant::now());

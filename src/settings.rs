@@ -12,10 +12,24 @@ pub struct WindowGeometry {
     pub height: f32,
 }
 
+/// System material behind a translucent window (Windows 11 only; ignored elsewhere).
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug, Default)]
+pub enum Backdrop {
+    #[default]
+    None,
+    Mica,
+    Acrylic,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub theme: Mode,
+    /// Alpha of the window surfaces, 0.3..=1.0
+    pub opacity: f32,
+    pub backdrop: Backdrop,
+    /// Name of the chosen theme from `themes`; none means the stock look
+    pub skin: Option<String>,
     pub language: Language,
     pub close_to_tray: bool,
     pub autostart: bool,
@@ -39,6 +53,9 @@ impl Default for Settings {
             .join("Torrents");
         Self {
             theme: Mode::Dark,
+            opacity: 1.0,
+            backdrop: Backdrop::None,
+            skin: None,
             language: Language::Auto,
             close_to_tray: true,
             autostart: false,
