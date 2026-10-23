@@ -917,6 +917,17 @@ impl App {
             tr("settings.appearance"),
             vec![
                 setting(p, tr("settings.skin"), tr("settings.skin.hint"), skin_pick, true),
+                setting(
+                    p,
+                    tr("settings.skin.import"),
+                    tr("settings.skin.import.hint"),
+                    button(tx(tr("settings.skin.import.button"), 13.0, p.txt))
+                        .padding([6, 12])
+                        .style(theme::outline(p))
+                        .on_press(Msg::ImportTheme)
+                        .into(),
+                    true,
+                ),
                 setting(p, tr("settings.theme"), tr("settings.theme.hint"), theme_seg, true),
                 setting(p, tr("settings.opacity"), tr("settings.opacity.hint"), opacity, true),
                 setting(p, tr("settings.backdrop"), tr("settings.backdrop.hint"), backdrop_seg, true),

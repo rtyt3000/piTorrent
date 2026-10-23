@@ -428,6 +428,8 @@ pub enum Msg {
     ConfirmCreate,
     SetTheme(Mode),
     SetSkin(themes::Skin),
+    ImportTheme,
+    ThemeZip(Option<std::path::PathBuf>),
     SetOpacity(f32),
     SetBackdrop(settings::Backdrop),
     SetLanguage(Language),
@@ -1137,6 +1139,28 @@ impl App {
                 })
                 .discard();
             }
+            Msg::ImportTheme => {
+                return Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .add_filter("zip", &["zip"])
+                            .pick_file()
+                            .await
+                            .map(|h| h.path().to_path_buf())
+                    },
+                    Msg::ThemeZip,
+                );
+            }
+            Msg::ThemeZip(None) => {}
+            Msg::ThemeZip(Some(path)) => match themes::import_zip(&path) {
+                Ok(name) => {
+                    self.skins = themes::load_all();
+                    if let Some(k) = self.skins.iter().find(|k| k.name == name).cloned() {
+                        return self.update(Msg::SetSkin(k));
+                    }
+                }
+                Err(e) => self.notice = Some(trf("notice.theme", &[e])),
+            },
             Msg::SetSkin(k) => {
                 if let Some(m) = k.mode() {
                     self.settings.theme = m;

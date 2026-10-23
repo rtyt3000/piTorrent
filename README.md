@@ -34,7 +34,7 @@ The interface is built with [iced](https://iced.rs), the torrent engine is [libr
 - Tracker search through plugins (see [docs/plugins.md](docs/plugins.md), in Russian): Jackett / Prowlarr, Internet Archive, your own plugins.
 - Tray, closing to the tray (hold the close button to quit), autostart, completion notifications, a single running instance.
 - Registers as the handler of `.torrent` and `magnet:`.
-- Dark and light themes, English and Russian interface.
+- Dark and light themes, custom JSON themes (importable from a `.zip`), window transparency and Mica / Acrylic on Windows 11, English and Russian interface.
 
 ## Building and running
 
@@ -92,6 +92,7 @@ The documents below are in Russian.
 
 - [docs/architecture.md](docs/architecture.md): how the project is organised.
 - [docs/plugins.md](docs/plugins.md): how to write search plugins.
+- [docs/themes.md](docs/themes.md): how to write themes.
 - [AGENTS.md](AGENTS.md): notes for AI agents and contributors.
 
 The code is distributed under the [MIT](LICENSE) license. The icons in `assets/icons` are distributed under their own licenses (see the `LICENSE*` files in that folder). The font is Geist.

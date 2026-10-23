@@ -3,6 +3,7 @@ use iced::overlay::menu;
 use iced::widget::{button, container, pick_list, progress_bar, text_editor, text_input};
 use iced::{Background, Border, Color, Shadow, Theme};
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -38,71 +39,27 @@ pub struct Palette {
     pub off: Color,
 }
 
-const fn hex(v: u32) -> Color {
-    Color::from_rgb(
-        ((v >> 16) & 0xFF) as f32 / 255.0,
-        ((v >> 8) & 0xFF) as f32 / 255.0,
-        (v & 0xFF) as f32 / 255.0,
-    )
-}
-
 const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Color {
     Color { r, g, b, a }
 }
 
 impl Palette {
     pub fn of(mode: Mode) -> Self {
-        match mode {
-            Mode::Dark => Self {
-                bg: hex(0x1F2023),
-                isl: hex(0x191A1C),
-                ibd: Color::TRANSPARENT,
-                elev: hex(0x26282C),
-                line: hex(0x303236),
-                bd: hex(0x4E5157),
-                hov: rgba(1.0, 1.0, 1.0, 0.05),
-                act: hex(0x33353B),
-                sel: hex(0x33353B),
-                txt: hex(0xDFE1E5),
-                txt2: hex(0xCED0D6),
-                mute: hex(0x8E9299),
-                faint: hex(0x8E9299),
-                acc: hex(0x3871E1),
-                acc_ink: hex(0xFFFFFF),
-                acc_hov: hex(0x4A85F5),
-                dl: hex(0x548AF7),
-                seed: hex(0x5FB865),
-                pause: hex(0x868A91),
-                err: hex(0xE55765),
-                track: hex(0x43454A),
-                input: hex(0x191A1C),
-                off: hex(0x5A5D63),
-            },
-            Mode::Light => Self {
-                bg: hex(0xF3F4F7),
-                isl: hex(0xFFFFFF),
-                ibd: hex(0xE6E8EC),
-                elev: hex(0xF7F8FA),
-                line: hex(0xEBECF0),
-                bd: hex(0xC9CCD6),
-                hov: rgba(0.0, 0.0, 0.0, 0.05),
-                act: rgba(0.0, 0.0, 0.0, 0.08),
-                sel: hex(0xE4E6EB),
-                txt: hex(0x1E1F22),
-                txt2: hex(0x383A42),
-                mute: hex(0x5C6070),
-                faint: hex(0x6C707E),
-                acc: hex(0x3068E0),
-                acc_ink: hex(0xFFFFFF),
-                acc_hov: hex(0x2556C0),
-                dl: hex(0x2E62D6),
-                seed: hex(0x1F8A3B),
-                pause: hex(0x8C909A),
-                err: hex(0xC7222D),
-                track: hex(0xDFE1E5),
-                input: hex(0xFFFFFF),
-                off: hex(0xA8ABB4),
-            },
+        // The stock look lives in `assets/themes/pitorrent.json`; the magenta only shows up
+        // if that file forgets a colour (a test checks it doesn't).
+        static STOCK: OnceLock<[Palette; 2]> = OnceLock::new();
+        let both = STOCK.get_or_init(|| {
+            let skin = crate::themes::stock();
+            [Mode::Dark, Mode::Light].map(|m| skin.paint(Palette::filled(Color::from_rgb(1.0, 0.0, 1.0)), m))
+        });
+        both[(mode == Mode::Light) as usize]
+    }
+
+    fn filled(c: Color) -> Self {
+        Self {
+            bg: c, isl: c, ibd: c, elev: c, line: c, bd: c, hov: c, act: c, sel: c, txt: c, txt2: c,
+            mute: c, faint: c, acc: c, acc_ink: c, acc_hov: c, dl: c, seed: c, pause: c, err: c,
+            track: c, input: c, off: c,
         }
     }
 
