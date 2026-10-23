@@ -1,6 +1,6 @@
 # piTorrent
 
-[![Release](https://github.com/rtyt3000/piTorrent/actions/workflows/release.yml/badge.svg)](https://github.com/rtyt3000/piTorrent/actions/workflows/release.yml)
+[![Release](https://github.com/rtyt3000/piTorrent/actions/workflows/release.yml/badge.svg)](https://github.com/rtyt3000/piTorrent/actions/workflows/release.yml) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue) ![Rust](https://img.shields.io/badge/Rust-2024%20edition-orange?logo=rust) ![Size](https://img.shields.io/badge/download-12%20MB-informational)
 
 ![assent/screenshot.png](assets/screenshot.png)
 
