@@ -116,6 +116,9 @@ impl OurFileExt for File {
 // handle is therefore only kept while the file is being written to; after a short idle
 // period it is swapped for a read-only one and reopened on the next write.
 const WRITER_IDLE: Duration = Duration::from_secs(3);
+// A file nobody has read or written for this long is closed altogether (and reopened on demand),
+// so an idle torrent holds no handles: its folder can be renamed, moved or deleted in Explorer.
+const HANDLE_IDLE: Duration = Duration::from_secs(15);
 
 #[derive(Default, Debug)]
 struct OpenedFileLocked {
@@ -124,6 +127,8 @@ struct OpenedFileLocked {
     writable: bool,
     /// No file on disk until the first write, so deselected files aren't created as empty ones.
     lazy: bool,
+    /// The handle was closed for being idle; reopen it from `path` when needed.
+    reopen: bool,
     #[cfg(windows)]
     tried_marking_sparse: bool,
 }
@@ -147,6 +152,8 @@ struct Inner {
     file: RwLock<OpenedFileLocked>,
     /// Millis since `epoch()` of the last write.
     last_write: AtomicU64,
+    /// Millis since `epoch()` of the last read or write.
+    last_use: AtomicU64,
 }
 
 fn epoch() -> Instant {
@@ -159,6 +166,18 @@ fn now_ms() -> u64 {
 }
 
 impl Inner {
+    fn release_idle(&self) {
+        self.release_writer();
+        if now_ms().saturating_sub(self.last_use.load(Ordering::Relaxed)) < HANDLE_IDLE.as_millis() as u64 {
+            return;
+        }
+        let mut g = self.file.write();
+        if g.fd.is_some() && !g.writable {
+            g.fd = None;
+            g.reopen = true;
+        }
+    }
+
     fn release_writer(&self) {
         if now_ms().saturating_sub(self.last_write.load(Ordering::Relaxed))
             < WRITER_IDLE.as_millis() as u64
@@ -190,7 +209,7 @@ fn registry() -> &'static Mutex<Vec<Weak<Inner>>> {
                     r.iter().filter_map(Weak::upgrade).collect()
                 };
                 for f in live {
-                    f.release_writer();
+                    f.release_idle();
                 }
             })
             .ok();
@@ -208,6 +227,7 @@ impl OpenedFile {
         let inner = Arc::new(Inner {
             file: RwLock::new(l),
             last_write: AtomicU64::new(now_ms()),
+            last_use: AtomicU64::new(now_ms()),
         });
         registry().lock().push(Arc::downgrade(&inner));
         Self { inner }
@@ -220,6 +240,7 @@ impl OpenedFile {
             fd: Some(f),
             writable: true,
             lazy: false,
+            reopen: false,
             #[cfg(windows)]
             tried_marking_sparse: false,
         })
@@ -232,6 +253,7 @@ impl OpenedFile {
             fd: None,
             writable: false,
             lazy: true,
+            reopen: false,
             #[cfg(windows)]
             tried_marking_sparse: false,
         })
@@ -242,6 +264,7 @@ impl OpenedFile {
             inner: Arc::new(Inner {
                 file: RwLock::new(Default::default()),
                 last_write: AtomicU64::new(0),
+                last_use: AtomicU64::new(0),
             }),
         }
     }
@@ -253,9 +276,10 @@ impl OpenedFile {
 
     /// Read-only access (the handle may or may not be writable).
     pub fn lock_read(&self) -> crate::Result<impl Deref<Target = File>> {
+        self.inner.last_use.store(now_ms(), Ordering::Relaxed);
         {
             let g = self.inner.file.read();
-            if g.fd.is_none() && g.lazy {
+            if g.fd.is_none() && (g.lazy || g.reopen) {
                 drop(g);
                 let mut g = self.inner.file.write();
                 if g.fd.is_none() {
@@ -263,6 +287,7 @@ impl OpenedFile {
                     let f = File::open(&g.path).map_err(|_| Error::FsFileIsNone)?;
                     g.fd = Some(f);
                     g.writable = false;
+                    g.reopen = false;
                 }
             }
         }
@@ -282,6 +307,7 @@ impl OpenedFile {
     /// On Windows also marks the file sparse once.
     pub fn lock_writable(&self) -> crate::Result<impl Deref<Target = File>> {
         self.inner.last_write.store(now_ms(), Ordering::Relaxed);
+        self.inner.last_use.store(now_ms(), Ordering::Relaxed);
         {
             let g = self.inner.file.read();
             if g.writable && g.fd.is_some() {
@@ -297,7 +323,7 @@ impl OpenedFile {
             }
         }
         let mut g = self.inner.file.write();
-        if g.fd.is_none() && !g.lazy {
+        if g.fd.is_none() && !g.lazy && !g.reopen {
             return Err(Error::FsFileIsNone);
         }
         if !g.writable {
@@ -314,6 +340,7 @@ impl OpenedFile {
                 .map_err(|e| Error::Anyhow(anyhow::anyhow!("error reopening {:?}: {e}", g.path)))?;
             g.fd = Some(f);
             g.writable = true;
+            g.reopen = false;
         }
         #[cfg(windows)]
         if !g.tried_marking_sparse {

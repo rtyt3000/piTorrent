@@ -264,7 +264,7 @@ impl Backend for RqbitBackend {
                 uploaded: st.uploaded_bytes,
                 state,
                 finished: st.finished,
-                error: st.error,
+                error: st.error.map(|e| localized_error(&e)),
                 down_bps: down,
                 up_bps: up,
                 eta: (down > 0 && left > 0).then(|| left / down),
@@ -279,6 +279,29 @@ impl Backend for RqbitBackend {
             out.detail = self.detail(id, want_peers, &out.torrents);
         }
         out
+    }
+
+    async fn recheck(&self, id: usize, resume_after: bool) -> Result<(), String> {
+        let idx = TorrentIdOrHash::Id(id);
+        self.api.api_torrent_action_recheck(idx).map_err(|e| e.to_string())?;
+        let api = self.api.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                let Ok(stats) = api.api_stats_v1(idx) else {
+                    return; // forgotten in the meantime
+                };
+                match stats.state {
+                    TorrentStatsState::Initializing { .. } => continue,
+                    TorrentStatsState::Paused if resume_after => {
+                        let _ = api.api_torrent_action_start(idx).await;
+                        return;
+                    }
+                    _ => return,
+                }
+            }
+        });
+        Ok(())
     }
 
     async fn pause(&self, id: usize) -> Result<(), String> {
@@ -460,6 +483,14 @@ impl Backend for RqbitBackend {
 
 /// One cell per piece up to `PIECE_CELLS`, then pieces are grouped. A cell holds the share of its
 /// wanted pieces that are downloaded, or `SKIPPED` when none of them is wanted.
+/// The engine words its errors in English; the ones the user can act on get a translation.
+fn localized_error(e: &str) -> String {
+    match e.find("missing files: ") {
+        Some(at) => crate::i18n::trf("err.missing_files", &[e[at + "missing files: ".len()..].to_string()]),
+        None => e.to_string(),
+    }
+}
+
 fn cells_from_bitfield(have_at: impl Fn(usize) -> bool, wanted_at: impl Fn(usize) -> bool, total: usize) -> Vec<f32> {
     let cells = total.min(PIECE_CELLS);
     (0..cells)

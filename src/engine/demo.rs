@@ -121,6 +121,10 @@ impl Backend for DemoBackend {
         }
     }
 
+    async fn recheck(&self, _: usize, _: bool) -> Result<(), String> {
+        Ok(())
+    }
+
     async fn pause(&self, id: usize) -> Result<(), String> {
         if let Some(st) = self.states.lock().unwrap().get_mut(id - 1) {
             *st = if SAMPLES[id - 1].percent == 100 { State::Completed } else { State::Paused };

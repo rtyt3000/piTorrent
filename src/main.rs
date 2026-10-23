@@ -396,6 +396,7 @@ pub enum Msg {
     OpenCreate,
     CloseDialog,
     Resume,
+    Recheck,
     Pause,
     AskDelete,
     DeleteFilesToggle,
@@ -873,6 +874,25 @@ impl App {
                 return self.act(move |e| async move {
                     for id in ids {
                         e.resume(id).await?;
+                    }
+                    Ok(())
+                });
+            }
+            Msg::Recheck => {
+                self.context = None;
+                // A torrent that was running (not paused, queued or broken) is started again afterwards.
+                let ids: Vec<(usize, bool)> = self
+                    .targets()
+                    .into_iter()
+                    .map(|id| {
+                        let running = self.snap.torrents.iter().find(|t| t.id == id)
+                            .is_some_and(|t| matches!(t.state, State::Downloading | State::Seeding));
+                        (id, running)
+                    })
+                    .collect();
+                return self.act(move |e| async move {
+                    for (id, running) in ids {
+                        e.recheck(id, running).await?;
                     }
                     Ok(())
                 });

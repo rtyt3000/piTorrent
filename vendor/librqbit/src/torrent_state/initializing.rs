@@ -186,6 +186,26 @@ impl TorrentStateInitializing {
         Some(hp)
     }
 
+    /// Names of the selected files that hold pieces we claim to have but are not on disk.
+    fn missing_files(&self, have: &crate::type_aliases::BS) -> String {
+        let mut names = Vec::new();
+        for (idx, fi) in self.metadata.file_infos.iter().enumerate() {
+            let selected = self.only_files.as_ref().map(|o| o.contains(&idx)).unwrap_or(true);
+            if !selected || fi.attrs.padding || fi.len == 0 {
+                continue;
+            }
+            let claimed = have.get(fi.piece_range_usize()).is_some_and(|r| r.any());
+            if claimed && !self.shared.options.output_folder.join(&fi.relative_filename).exists() {
+                names.push(fi.relative_filename.to_string_lossy().into_owned());
+            }
+        }
+        match names.len() {
+            0 => String::new(),
+            1..=3 => names.join(", "),
+            n => format!("{}, … ({n} files)", names[..3].join(", ")),
+        }
+    }
+
     pub async fn check(&self) -> anyhow::Result<TorrentStatePaused> {
         let id: TorrentIdOrHash = self.shared.info_hash.into();
         let bitv_factory = self
@@ -206,6 +226,16 @@ impl TorrentStateInitializing {
                 .await
                 .context("error loading have_pieces")?
         };
+
+        // piTorrent patch: files that are gone must not be recreated quietly (the check would then
+        // download them again, and `ensure_file_length` below would create empty ones). Like
+        // qBittorrent's "Missing files": stop with an error and wait for a forced recheck.
+        if let Some(hp) = &have_pieces {
+            let missing = self.missing_files(hp.as_slice());
+            if !missing.is_empty() {
+                anyhow::bail!("missing files: {}", missing);
+            }
+        }
 
         let have_pieces = self.validate_fastresume(&*bitv_factory, have_pieces).await;
 

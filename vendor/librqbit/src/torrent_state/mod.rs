@@ -471,6 +471,36 @@ impl ManagedTorrent {
         self.locked.read().paused
     }
 
+    /// piTorrent patch, the counterpart of libtorrent's `force_recheck`: drops what is known about
+    /// the pieces (and the stored fastresume bitfield) and hashes all the files again. Works from
+    /// the live, paused and error states; the torrent is left paused when the check is done.
+    pub(crate) fn recheck(self: &Arc<Self>) -> anyhow::Result<()> {
+        {
+            let mut g = self.locked.write();
+            match &g.state {
+                ManagedTorrentState::Live(live) => {
+                    live.pause()?;
+                }
+                ManagedTorrentState::Initializing(_) => bail!("torrent is being checked already"),
+                ManagedTorrentState::None => bail!("bug: torrent is in empty state"),
+                ManagedTorrentState::Paused(_) | ManagedTorrentState::Error(_) => {}
+            }
+            let metadata = self.metadata.load_full().context("no metadata yet, nothing to recheck")?;
+            let initializing = Arc::new(TorrentStateInitializing::new(
+                self.shared.clone(),
+                metadata.clone(),
+                g.only_files.clone(),
+                self.shared.storage_factory.create_and_init(self.shared(), &metadata)?,
+                // Forgets the stored bitfield, which makes the check a full one.
+                true,
+            ));
+            g.state = ManagedTorrentState::Initializing(initializing);
+            g.paused = true;
+            self.state_change_notify.notify_waiters();
+        }
+        self.start(None, true)
+    }
+
     /// Pause the torrent if it's live.
     pub(crate) fn pause(&self) -> anyhow::Result<()> {
         let mut g = self.locked.write();

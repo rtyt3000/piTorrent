@@ -114,6 +114,8 @@ pub trait Backend: Send + Sync {
     fn snapshot(&self, selected: Option<usize>, want_peers: bool) -> Snapshot;
     async fn pause(&self, id: usize) -> Result<(), String>;
     async fn resume(&self, id: usize) -> Result<(), String>;
+    /// Hashes all the files again; with `resume_after` the torrent is started once the check is done.
+    async fn recheck(&self, id: usize, resume_after: bool) -> Result<(), String>;
     async fn remove(&self, id: usize, delete_files: bool) -> Result<(), String>;
     async fn set_only_files(&self, id: usize, files: Vec<usize>) -> Result<(), String>;
     async fn preview(&self, bytes: Vec<u8>) -> Result<Preview, String>;
@@ -441,6 +443,14 @@ impl Engine {
         self.backend.resume(id).await
     }
 
+    pub async fn recheck(&self, id: usize, resume_after: bool) -> Result<(), String> {
+        {
+            let mut q = self.queue.lock().unwrap();
+            q.queued.remove(&id);
+        }
+        self.backend.recheck(id, resume_after).await
+    }
+
     pub async fn remove(&self, id: usize, delete_files: bool) -> Result<(), String> {
         {
             let mut q = self.queue.lock().unwrap();
@@ -530,6 +540,7 @@ mod tests {
             self.set_state(id, if finished { State::Seeding } else { State::Downloading });
             Ok(())
         }
+        async fn recheck(&self, _: usize, _: bool) -> Result<(), String> { Ok(()) }
         async fn remove(&self, id: usize, _: bool) -> Result<(), String> {
             self.torrents.lock().unwrap().retain(|t| t.id != id);
             Ok(())

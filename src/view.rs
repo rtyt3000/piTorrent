@@ -425,6 +425,7 @@ impl App {
             column![
                 menu_item(p, Ico::Play, tr("ctx.resume"), Msg::Resume),
                 menu_item(p, Ico::Pause, tr("ctx.pause"), Msg::Pause),
+                menu_item(p, Ico::Check, tr("ctx.recheck"), Msg::Recheck),
                 sep(),
                 menu_item(p, Ico::ArrowUp, tr("ctx.priority_top"), Msg::Priority(PriorityMove::Top)),
                 menu_item(p, Ico::ArrowUp, tr("ctx.priority_up"), Msg::Priority(PriorityMove::Up)),
