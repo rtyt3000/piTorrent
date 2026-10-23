@@ -117,6 +117,8 @@
   "add.start.hint": "Без дополнительного подтверждения",
   "create.title": "Создать торрент",
   "create.path": "Файл или папка",
+  "create.name": "Название торрента",
+  "create.name.placeholder": "Имя .torrent файла",
   "create.path.placeholder": "Путь к файлу или папке",
   "create.file": "Файл…",
   "create.dir": "Папка…",

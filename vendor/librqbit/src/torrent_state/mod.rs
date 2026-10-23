@@ -629,15 +629,32 @@ impl ManagedTorrent {
         // if paused, need to update chunk tracker
 
         let mut g = self.locked.write();
+        // Files that weren't selected until now may exist only as edges in the part file:
+        // creating them brings those over.
+        let was_selected = |f: &usize| g.only_files.as_ref().map(|o| o.contains(f)).unwrap_or(true);
+        let newly_selected: Vec<usize> = only_files.iter().copied().filter(|f| !was_selected(f)).collect();
+        let create_files = |files: &dyn crate::storage::TorrentStorage| {
+            for f in newly_selected.iter().copied() {
+                let fi = &metadata.file_infos[f];
+                if fi.attrs.padding {
+                    continue;
+                }
+                if let Err(e) = files.ensure_file_length(f, fi.len) {
+                    warn!(file = f, "error creating a newly selected file: {e:#}");
+                }
+            }
+        };
         match &mut g.state {
             ManagedTorrentState::Initializing(_) => bail!("can't update initializing torrent"),
             ManagedTorrentState::Error(_) => {}
             ManagedTorrentState::None => {}
             ManagedTorrentState::Paused(p) => {
                 p.update_only_files(only_files)?;
+                create_files(&*p.files);
             }
             ManagedTorrentState::Live(l) => {
                 l.update_only_files(only_files)?;
+                create_files(&*l.files);
             }
         };
 

@@ -123,50 +123,82 @@ pub struct TreeRow {
     pub folder: bool,
     pub size: u64,
     pub idxs: Vec<usize>,
+    /// Folder path joined with `/`; the key of its open/closed state.
+    pub path: String,
 }
 
+/// Files of one folder can be scattered through the torrent's file list, so the tree is built
+/// by path (folders in order of first appearance) rather than from neighbouring entries.
 pub fn build_tree(files: &[(Vec<String>, u64)]) -> Vec<TreeRow> {
-    let mut rows: Vec<TreeRow> = Vec::new();
-    let mut open: Vec<String> = Vec::new();
+    struct Node {
+        name: String,
+        folder: bool,
+        size: u64,
+        idxs: Vec<usize>,
+        kids: Vec<Node>,
+    }
+    let node = |name: String, folder: bool| Node { name, folder, size: 0, idxs: Vec::new(), kids: Vec::new() };
+    let mut root = node(String::new(), true);
     for (i, (comps, size)) in files.iter().enumerate() {
         let Some((name, dir)) = comps.split_last() else {
             continue;
         };
-        let common = open.iter().zip(dir).take_while(|(a, b)| a == b).count();
-        for (d, part) in dir.iter().enumerate().skip(common) {
-            rows.push(TreeRow {
-                name: part.clone(),
-                depth: d,
-                folder: true,
-                size: 0,
-                idxs: Vec::new(),
-            });
+        let mut cur = &mut root;
+        for part in dir {
+            cur.size += size;
+            cur.idxs.push(i);
+            let pos = match cur.kids.iter().position(|k| k.folder && k.name == *part) {
+                Some(pos) => pos,
+                None => {
+                    cur.kids.push(node(part.clone(), true));
+                    cur.kids.len() - 1
+                }
+            };
+            cur = &mut cur.kids[pos];
         }
-        open = dir.to_vec();
-        rows.push(TreeRow {
-            name: name.clone(),
-            depth: dir.len(),
-            folder: false,
-            size: *size,
-            idxs: vec![i],
-        });
+        cur.size += size;
+        cur.idxs.push(i);
+        cur.kids.push(Node { size: *size, idxs: vec![i], ..node(name.clone(), false) });
     }
-    for i in 0..rows.len() {
-        if !rows[i].folder {
-            continue;
-        }
-        let depth = rows[i].depth;
-        let (mut idxs, mut size) = (Vec::new(), 0);
-        for r in rows[i + 1..].iter().take_while(|r| r.depth > depth) {
-            if !r.folder {
-                idxs.extend(&r.idxs);
-                size += r.size;
+
+    fn flatten(n: &Node, depth: usize, prefix: &str, out: &mut Vec<TreeRow>) {
+        for k in &n.kids {
+            let path = if prefix.is_empty() { k.name.clone() } else { format!("{prefix}/{}", k.name) };
+            out.push(TreeRow {
+                name: k.name.clone(),
+                depth,
+                folder: k.folder,
+                size: k.size,
+                idxs: k.idxs.clone(),
+                path: path.clone(),
+            });
+            if k.folder {
+                flatten(k, depth + 1, &path, out);
             }
         }
-        rows[i].idxs = idxs;
-        rows[i].size = size;
     }
+    let mut rows = Vec::new();
+    flatten(&root, 0, "", &mut rows);
     rows
+}
+
+/// The rows that show: everything inside a closed folder is hidden.
+pub fn visible<'a>(rows: &'a [TreeRow], open: &std::collections::HashSet<String>) -> Vec<&'a TreeRow> {
+    let mut out = Vec::new();
+    let mut hidden_below: Option<usize> = None;
+    for r in rows {
+        if let Some(d) = hidden_below {
+            if r.depth > d {
+                continue;
+            }
+            hidden_below = None;
+        }
+        out.push(r);
+        if r.folder && !open.contains(&r.path) {
+            hidden_below = Some(r.depth);
+        }
+    }
+    out
 }
 
 pub fn tri_state(idxs: &[usize], is_on: impl Fn(usize) -> bool) -> Option<bool> {

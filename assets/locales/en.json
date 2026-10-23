@@ -117,6 +117,8 @@
   "add.start.hint": "No extra confirmation",
   "create.title": "Create torrent",
   "create.path": "File or folder",
+  "create.name": "Torrent name",
+  "create.name.placeholder": "Name of the .torrent file",
   "create.path.placeholder": "Path to a file or folder",
   "create.file": "File…",
   "create.dir": "Folder…",

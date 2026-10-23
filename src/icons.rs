@@ -77,6 +77,17 @@ fn handles() -> &'static Vec<Handle> {
     H.get_or_init(|| ALL.iter().map(|i| Handle::from_memory(i.source())).collect())
 }
 
+/// The folder arrow: down when open, right when closed.
+pub fn chevron<'a, M: 'a>(open: bool, size: f32, color: Color) -> Element<'a, M> {
+    let angle = if open { 0.0 } else { -std::f32::consts::FRAC_PI_2 };
+    svg(handles()[Ico::Chevron as usize].clone())
+        .width(Length::Fixed(size))
+        .height(Length::Fixed(size))
+        .rotation(iced::Rotation::Solid(iced::Radians(angle)))
+        .style(move |_, _| svg::Style { color: Some(color) })
+        .into()
+}
+
 pub fn icon<'a, M: 'a>(i: Ico, size: f32, color: Color) -> Element<'a, M> {
     svg(handles()[i as usize].clone())
         .width(Length::Fixed(size))

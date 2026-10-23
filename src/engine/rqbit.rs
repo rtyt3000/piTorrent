@@ -56,6 +56,27 @@ fn move_files(from: &Path, to: &Path, files: &[Vec<String>], remove_root: bool) 
     Ok(())
 }
 
+/// Carries the hidden `.parts` file (the edges of deselected files, see the vendored storage)
+/// along with a moved torrent; best effort, a missing one is simply re-downloaded.
+fn move_parts(old_folder: &Path, new_folder: &Path, multi: bool, info_hash: &str) {
+    let parts = |folder: &Path| {
+        let base = if multi { folder.parent().unwrap_or(folder) } else { folder };
+        base.join(".parts")
+    };
+    let name = format!(".{info_hash}.parts");
+    let (from, to) = (parts(old_folder), parts(new_folder));
+    if from == to || !from.join(&name).exists() {
+        return;
+    }
+    let _ = std::fs::create_dir_all(&to);
+    if std::fs::rename(from.join(&name), to.join(&name)).is_err() {
+        if std::fs::copy(from.join(&name), to.join(&name)).is_ok() {
+            let _ = std::fs::remove_file(from.join(&name));
+        }
+    }
+    let _ = std::fs::remove_dir(&from);
+}
+
 /// Public trackers added to every torrent: many magnet links carry none, and DHT alone
 /// is slow to find peers for big or rarely-seeded torrents.
 const DEFAULT_TRACKERS: &[&str] = &[
@@ -378,6 +399,10 @@ impl Backend for RqbitBackend {
             .await
             .map_err(|e| e.to_string())
             .and_then(|r| r);
+
+        if moved.is_ok() {
+            move_parts(&old_folder, &new_folder, multi, &details.info_hash);
+        }
 
         // Re-add at the new place, or back at the old one if the move failed.
         let target = if moved.is_ok() { new_folder } else { old_folder };

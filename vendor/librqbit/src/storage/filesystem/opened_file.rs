@@ -122,6 +122,8 @@ struct OpenedFileLocked {
     path: PathBuf,
     fd: Option<File>,
     writable: bool,
+    /// No file on disk until the first write, so deselected files aren't created as empty ones.
+    lazy: bool,
     #[cfg(windows)]
     tried_marking_sparse: bool,
 }
@@ -217,6 +219,19 @@ impl OpenedFile {
             path,
             fd: Some(f),
             writable: true,
+            lazy: false,
+            #[cfg(windows)]
+            tried_marking_sparse: false,
+        })
+    }
+
+    /// The file is created (or an existing one opened) on the first write.
+    pub fn new_lazy(path: PathBuf) -> Self {
+        Self::from_locked(OpenedFileLocked {
+            path,
+            fd: None,
+            writable: false,
+            lazy: true,
             #[cfg(windows)]
             tried_marking_sparse: false,
         })
@@ -238,6 +253,19 @@ impl OpenedFile {
 
     /// Read-only access (the handle may or may not be writable).
     pub fn lock_read(&self) -> crate::Result<impl Deref<Target = File>> {
+        {
+            let g = self.inner.file.read();
+            if g.fd.is_none() && g.lazy {
+                drop(g);
+                let mut g = self.inner.file.write();
+                if g.fd.is_none() {
+                    // A file that doesn't exist yet simply has nothing to read.
+                    let f = File::open(&g.path).map_err(|_| Error::FsFileIsNone)?;
+                    g.fd = Some(f);
+                    g.writable = false;
+                }
+            }
+        }
         RwLockReadGuard::try_map(self.inner.file.read(), |f| f.as_ref())
             .ok()
             .ok_or(Error::FsFileIsNone)
@@ -269,13 +297,19 @@ impl OpenedFile {
             }
         }
         let mut g = self.inner.file.write();
-        if g.fd.is_none() {
+        if g.fd.is_none() && !g.lazy {
             return Err(Error::FsFileIsNone);
         }
         if !g.writable {
+            if let Some(dir) = g.path.parent().filter(|_| g.lazy) {
+                std::fs::create_dir_all(dir)
+                    .map_err(|e| Error::Anyhow(anyhow::anyhow!("error creating {dir:?}: {e}")))?;
+            }
             let f = std::fs::OpenOptions::new()
                 .read(true)
                 .write(true)
+                .create(g.lazy)
+                .truncate(false)
                 .open(&g.path)
                 .map_err(|e| Error::Anyhow(anyhow::anyhow!("error reopening {:?}: {e}", g.path)))?;
             g.fd = Some(f);

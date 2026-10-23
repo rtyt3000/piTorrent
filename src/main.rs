@@ -259,6 +259,8 @@ pub struct AddState {
     pub preview: Option<Preview>,
     pub tree: Vec<TreeRow>,
     pub skip: HashSet<usize>,
+    /// Paths of the folders that are open in the file list.
+    pub open: HashSet<String>,
     pub magnets: text_editor::Content,
     pub folder: String,
     pub start: bool,
@@ -274,6 +276,8 @@ pub struct AddState {
 
 pub struct CreateState {
     pub path: String,
+    /// Suggested file name of the .torrent; follows the picked file or folder.
+    pub name: String,
     pub size: Option<u64>,
     pub trackers: text_editor::Content,
     pub piece: PieceSize,
@@ -297,6 +301,12 @@ pub struct App {
     pub filter: Filter,
     pub search: String,
     pub selected: Option<usize>,
+    pub close_hover: bool,
+    /// Set while the close button is held down: the token of the pending "held" timer.
+    pub close_hold: Option<u64>,
+    pub close_token: u64,
+    /// Open folders in the details' file list, per torrent.
+    pub open_dirs: HashSet<(usize, String)>,
     pub multi: BTreeSet<usize>,
     pub anchor: Option<usize>,
     pub context: Option<iced::Point>,
@@ -367,6 +377,9 @@ pub enum Msg {
     DeleteFilesToggle,
     ConfirmDelete,
     ToggleFile(Vec<usize>),
+    /// A folder in the details' file list, of the torrent with this id.
+    ToggleDir(usize, String),
+    AddToggleDir(String),
     FilesAll,
     FilesNone,
     AddMode(AddMode),
@@ -382,6 +395,7 @@ pub enum Msg {
     ConfirmAdd,
     FileDropped(PathBuf),
     CreatePath(String),
+    CreateName(String),
     PickCreate(bool),
     CreatePicked(Option<PathBuf>),
     Trackers(text_editor::Action),
@@ -399,6 +413,11 @@ pub enum Msg {
     WindowMinimize,
     WindowToggleMax,
     WindowClose,
+    /// The close button of the title bar: a click closes the window, holding it quits the app.
+    CloseHover(bool),
+    CloseDown,
+    CloseUp,
+    CloseHeld(u64),
     WindowResize(window::Direction),
     SetDir(String),
     StartNowToggle,
@@ -488,6 +507,7 @@ impl App {
                 preview: None,
                 tree: Vec::new(),
                 skip: HashSet::new(),
+                open: HashSet::new(),
                 magnets: text_editor::Content::new(),
                 folder: settings.download_dir.clone(),
                 start: settings.start_now,
@@ -500,6 +520,7 @@ impl App {
             },
             create: CreateState {
                 path: String::new(),
+                name: String::new(),
                 size: None,
                 trackers: text_editor::Content::new(),
                 piece: PieceSize::Auto,
@@ -512,6 +533,10 @@ impl App {
             filter: Filter::All,
             search: String::new(),
             selected: None,
+            close_hover: false,
+            close_hold: None,
+            close_token: 0,
+            open_dirs: HashSet::new(),
             multi: BTreeSet::new(),
             anchor: None,
             context: None,
@@ -840,6 +865,16 @@ impl App {
                     });
                 }
             }
+            Msg::ToggleDir(id, path) => {
+                if !self.open_dirs.remove(&(id, path.clone())) {
+                    self.open_dirs.insert((id, path));
+                }
+            }
+            Msg::AddToggleDir(path) => {
+                if !self.add.open.remove(&path) {
+                    self.add.open.insert(path);
+                }
+            }
             Msg::ToggleFile(idxs) => {
                 let Some(d) = self.snap.detail.as_mut() else {
                     return Task::none();
@@ -978,6 +1013,7 @@ impl App {
                 self.create.path = s;
                 self.create.size = None;
             }
+            Msg::CreateName(s) => self.create.name = s,
             Msg::PickCreate(folder) => {
                 return Task::perform(
                     async move {
@@ -994,6 +1030,7 @@ impl App {
             }
             Msg::CreatePicked(Some(p)) => {
                 self.create.size = Some(engine::dir_size(&p));
+                self.create.name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 self.create.path = p.to_string_lossy().into_owned();
             }
             Msg::CreatePicked(None) => {}
@@ -1058,6 +1095,35 @@ impl App {
                 return self.on_window(|id| window::minimize(id, true));
             }
             Msg::WindowToggleMax => return self.on_window(window::toggle_maximize),
+            Msg::CloseHover(on) => {
+                self.close_hover = on;
+                if !on {
+                    self.close_hold = None;
+                }
+            }
+            Msg::CloseDown => {
+                self.close_token += 1;
+                let token = self.close_token;
+                self.close_hold = Some(token);
+                return Task::perform(
+                    async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+                        token
+                    },
+                    Msg::CloseHeld,
+                );
+            }
+            Msg::CloseUp => {
+                if self.close_hold.take().is_some() {
+                    return self.update(Msg::WindowClose);
+                }
+            }
+            Msg::CloseHeld(token) => {
+                if self.close_hold == Some(token) {
+                    self.close_hold = None;
+                    return self.quit();
+                }
+            }
             Msg::WindowClose => {
                 return self.on_window(|id| Task::done(Msg::CloseRequested(id)));
             }
@@ -1421,6 +1487,7 @@ impl App {
         self.add.preview = None;
         self.add.tree.clear();
         self.add.skip.clear();
+        self.add.open.clear();
         self.add.trackers.clear();
         self.add.error = None;
         self.add.loading = false;
@@ -1548,7 +1615,9 @@ impl App {
             return;
         }
         for t in &new.torrents {
-            let was_downloading = self.snap.torrents.iter().any(|o| o.id == t.id && !o.finished);
+            // Not "unfinished": a torrent that is being checked at startup isn't finished either
+            // until the check ends, and that isn't a completed download.
+            let was_downloading = self.snap.torrents.iter().any(|o| o.id == t.id && o.state == State::Downloading && !o.finished);
             if was_downloading && t.finished && t.state != State::Error {
                 notify::send(tr("notify.completed"), t.name.clone());
             }
@@ -1571,9 +1640,9 @@ impl App {
         let piece = self.create.piece.bytes();
         let seed_now = self.create.seed_now;
         self.dialog = None;
-        let stem = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
+        let stem = Some(self.create.name.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()))
             .unwrap_or_else(|| "torrent".into());
         self.act(move |e| async move {
             let (bytes, folder) = e.create(path, trackers, piece).await?;

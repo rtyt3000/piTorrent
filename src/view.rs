@@ -1,5 +1,5 @@
 use crate::engine::{Detail, PIECE_CELLS, PriorityMove, State, TorrentInfo};
-use crate::icons::{Ico, icon};
+use crate::icons::{Ico, chevron, icon};
 use crate::theme::{self, Mode, Palette};
 use crate::i18n::{Language, plural, tr, trf};
 use crate::widgets::*;
@@ -117,6 +117,20 @@ fn note_top<'a>(p: Palette, text: String) -> El<'a> {
 
 const FLAG_W: f32 = 20.0;
 
+/// The arrow that opens and closes a folder in a file list; blank for a file, to keep the names aligned.
+fn dir_toggle<'a>(p: Palette, folder: bool, open: bool, msg: Msg) -> El<'a> {
+    if !folder {
+        return Space::new().width(18).into();
+    }
+    button(container(chevron(open, 11.0, p.mute)).center_x(GROW).center_y(GROW))
+        .width(18)
+        .height(18)
+        .padding(0)
+        .style(theme::ghost(p, 5.0))
+        .on_press(msg)
+        .into()
+}
+
 /// Country flag for a peer address; blank space of the same width when the country is unknown.
 fn flag_cell<'a>(addr: &str) -> El<'a> {
     match geo::country(addr).and_then(|cc| geo::flag(cc).map(|h| (cc, h))) {
@@ -162,9 +176,14 @@ impl App {
     pub fn view(&self) -> El<'_> {
         let p = self.palette();
         let page = container(
-            column![self.header(p), self.body(p), self.footer(p)]
-                .spacing(8)
-                .padding(Padding { top: 0.0, right: 8.0, bottom: 8.0, left: 8.0 }),
+            // The title bar goes edge to edge, so that the window buttons sit flush in the corner.
+            column![
+                self.header(p),
+                column![self.body(p), self.footer(p)]
+                    .spacing(8)
+                    .padding(Padding { top: 0.0, right: 8.0, bottom: 8.0, left: 8.0 }),
+            ]
+            .spacing(8),
         )
         .width(GROW)
         .height(GROW)
@@ -245,9 +264,9 @@ impl App {
             }),
         ];
         let control = |ico: Ico, msg: Msg, close: bool| -> El<'_> {
-            let b = button(container(icon(ico, 14.0, p.txt2)).center_x(GROW).center_y(GROW))
+            let b = button(container(icon(ico, 16.0, p.txt2)).center_x(GROW).center_y(GROW))
                 .width(46)
-                .height(32)
+                .height(48)
                 .padding(0)
                 .on_press(msg);
             if close {
@@ -256,13 +275,42 @@ impl App {
                 b.style(theme::ghost(p, 0.0)).into()
             }
         };
+        let hover = self.close_hover;
+        // Not a button: it has to tell a click from a hold, and a button only reports the release.
+        let close = mouse_area(
+            container(icon(Ico::Close, 16.0, p.txt2))
+                .width(46)
+                .height(48)
+                .center_x(46)
+                .center_y(48)
+                .style(move |_| container::Style {
+                    background: hover.then_some(iced::Background::Color(p.err)),
+                    ..Default::default()
+                }),
+        )
+        .on_enter(Msg::CloseHover(true))
+        .on_exit(Msg::CloseHover(false))
+        .on_press(Msg::CloseDown)
+        .on_release(Msg::CloseUp);
         let controls = row![
             control(Ico::Minimize, Msg::WindowMinimize, false),
             control(Ico::Square, Msg::WindowToggleMax, false),
-            control(Ico::Close, Msg::WindowClose, true),
+            close,
         ];
         let bar = row![
-            row![logo, semibold("piTorrent", 14.0, p.txt)].spacing(10).align_y(Alignment::Center),
+            row![
+                logo,
+                // Like the counters in the rail: tucked into the top right corner of the name.
+                row![
+                    semibold("piTorrent", 14.0, p.txt),
+                    container(container(tx(env!("CARGO_PKG_VERSION"), 8.0, p.txt)).padding([0, 3]).style(theme::badge(p)))
+                        .padding(Padding { top: -5.0, right: 0.0, bottom: 0.0, left: 0.0 }),
+                ]
+                .spacing(1)
+                .align_y(Alignment::Start),
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center),
             container(container(search).max_width(440)).center_x(GROW),
             controls,
         ]
@@ -718,16 +766,20 @@ impl App {
         .padding(Padding { top: 8.0, right: 16.0, bottom: 0.0, left: 16.0 })
         .align_y(Alignment::Center);
 
-        let rows = tree.into_iter().map(|r| {
+        let open_dirs: std::collections::HashSet<String> =
+            self.open_dirs.iter().filter(|(id, _)| *id == d.id).map(|(_, path)| path.clone()).collect();
+        let rows = visible(&tree, &open_dirs).into_iter().map(|r| {
             let state = tri_state(&r.idxs, |i| d.files[i].included);
             let off = state == Some(false);
             let (done, total): (u64, u64) = r.idxs.iter().fold((0, 0), |a, &i| (a.0 + d.files[i].progress, a.1 + d.files[i].length));
-            let pct = fmt::percent(done, total);
+            // Nothing to download (only empty files) counts as done.
+            let pct = if total == 0 { 100.0 } else { fmt::percent(done, total) };
             let color = if off { p.off } else if pct >= 100.0 { p.seed } else { p.dl };
             let fade = if off { 0.5 } else { 1.0 };
             row![
                 row![
                     Space::new().width((r.depth * 18) as f32),
+                    dir_toggle(p, r.folder, open_dirs.contains(&r.path), Msg::ToggleDir(d.id, r.path.clone())),
                     checkbox(p, state, Msg::ToggleFile(r.idxs.clone())),
                     icon(if r.folder { Ico::Folder } else { Ico::File }, 15.0, p.mute),
                     container(tx(r.name.clone(), 13.0, Color { a: fade, ..p.txt }).wrapping(iced::widget::text::Wrapping::None))
@@ -962,6 +1014,10 @@ impl App {
     // ---------- диалоги ----------
 
     pub(crate) fn dialog_frame<'a>(&self, p: Palette, title: String, body: El<'a>, ok: String, ok_msg: Option<Msg>) -> El<'a> {
+        self.dialog_frame_w(520, p, title, body, ok, ok_msg)
+    }
+
+    pub(crate) fn dialog_frame_w<'a>(&self, width: u32, p: Palette, title: String, body: El<'a>, ok: String, ok_msg: Option<Msg>) -> El<'a> {
         let close = button(container(icon(Ico::Close, 16.0, p.txt2)).center_x(GROW).center_y(GROW))
             .width(28)
             .height(28)
@@ -986,7 +1042,7 @@ impl App {
         .spacing(8)
         .padding([12, 20]);
         container(column![head, container(body).padding(Padding { top: 4.0, right: 20.0, bottom: 16.0, left: 20.0 }), hline(p), foot])
-            .width(520)
+            .width(width as f32)
             .style(theme::dialog(p))
             .into()
     }
@@ -1081,7 +1137,9 @@ impl App {
                             .on_action(Msg::Magnets)
                             .size(fs(12.0))
                             .font(MONO)
-                            .height(72)
+                            .wrapping(iced::widget::text::Wrapping::Glyph)
+                            .padding([8, 10])
+                            .height(84)
                             .style(theme::editor(p)),
                         row![paste, if can_fetch { fetch.on_press(Msg::MagnetFetch) } else { fetch }, hspace()].spacing(8),
                         status,
@@ -1103,16 +1161,23 @@ impl App {
                     fmt::bytes(picked.iter().map(|(_, f)| f.1).sum()),
                 ],
             );
-            let rows = a.tree.iter().map(|r| {
+            let rows = visible(&a.tree, &a.open).into_iter().map(|r| {
                 let state = tri_state(&r.idxs, |i| !a.skip.contains(&i));
                 let fade = if state == Some(false) { 0.5 } else { 1.0 };
                 row![
                     Space::new().width((r.depth * 18) as f32),
+                    dir_toggle(p, r.folder, a.open.contains(&r.path), Msg::AddToggleDir(r.path.clone())),
                     checkbox(p, state, Msg::AddToggle(r.idxs.clone())),
                     icon(if r.folder { Ico::Folder } else { Ico::File }, 15.0, p.mute),
-                    container(tx(r.name.clone(), 13.0, Color { a: fade, ..p.txt }).wrapping(iced::widget::text::Wrapping::None))
-                        .width(GROW)
-                        .clip(true),
+                    iced::widget::tooltip(
+                        container(tx(r.name.clone(), 13.0, Color { a: fade, ..p.txt }).wrapping(iced::widget::text::Wrapping::None))
+                            .width(GROW)
+                            .clip(true),
+                        container(tx(r.name.clone(), 12.0, Color::WHITE)).padding([4, 8]).max_width(620).style(container::dark),
+                        iced::widget::tooltip::Position::FollowCursor,
+                    )
+                    .snap_within_viewport(true)
+                    .delay(std::time::Duration::from_millis(300)),
                     mono(fmt::bytes(r.size), 12.0, Color { a: fade, ..p.txt2 })
                         .width(76)
                         .align_x(alignment::Horizontal::Right),
@@ -1171,7 +1236,7 @@ impl App {
             )
             .push(self.switch_row(p, tr("add.start"), tr("add.start.hint"), a.start, Msg::AddStartToggle));
 
-        self.dialog_frame(p, tr("add.title"), body.into(), tr("action.add"), ready.then_some(Msg::ConfirmAdd))
+        self.dialog_frame_w(680, p, tr("add.title"), body.into(), tr("action.add"), ready.then_some(Msg::ConfirmAdd))
     }
 
     fn create_dialog(&self, p: Palette) -> El<'_> {
@@ -1194,6 +1259,15 @@ impl App {
 
         let mut body = column![
             column![tx(tr("create.path"), 12.0, p.mute), path_row].spacing(6),
+            column![
+                tx(tr("create.name"), 12.0, p.mute),
+                text_input(&tr("create.name.placeholder"), &c.name)
+                    .on_input(Msg::CreateName)
+                    .size(fs(13.0))
+                    .padding([6, 10])
+                    .style(theme::input(p)),
+            ]
+            .spacing(6),
             column![
                 tx(tr("create.trackers"), 12.0, p.mute),
                 text_editor(&c.trackers)
