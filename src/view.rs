@@ -717,14 +717,21 @@ impl App {
         let mut map = column![].spacing(gap);
         for line in cells.chunks(ROW) {
             let mut r = row(line.iter().map(|&f| {
+                let mix = |from: Color, to: Color, t: f32| Color {
+                    r: from.r + (to.r - from.r) * t,
+                    g: from.g + (to.g - from.g) * t,
+                    b: from.b + (to.b - from.b) * t,
+                    a: 1.0,
+                };
+                // Not asked for (deselected files): cyan, apart from the blue of a download and the green of a seed.
                 let c = if f == SKIPPED {
-                    p.line
+                    mix(p.track, Color::from_rgb(0.15, 0.76, 0.85), 0.55)
                 } else if f >= 0.999 {
                     color
                 } else if f <= 0.0 {
                     p.track
                 } else {
-                    Color { r: p.track.r + (color.r - p.track.r) * f, g: p.track.g + (color.g - p.track.g) * f, b: p.track.b + (color.b - p.track.b) * f, a: 1.0 }
+                    mix(p.track, color, f)
                 };
                 container(Space::new()).width(GROW).height(cell_h).style(theme::fill(c, 2.0)).into()
             }))
@@ -921,28 +928,40 @@ impl App {
             .menu_style(theme::pick_menu(p))
             .width(170)
             .into();
-        column![group(
-            p,
-            tr("settings.appearance"),
-            vec![
-                setting(p, tr("settings.skin"), tr("settings.skin.hint"), skin_pick, true),
-                setting(
-                    p,
-                    tr("settings.skin.import"),
-                    tr("settings.skin.import.hint"),
-                    button(tx(tr("settings.skin.import.button"), 13.0, p.txt))
-                        .padding([6, 12])
-                        .style(theme::outline(p))
-                        .on_press(Msg::ImportTheme)
-                        .into(),
-                    true,
-                ),
-                setting(p, tr("settings.theme"), tr("settings.theme.hint"), theme_seg, true),
-                setting(p, tr("settings.opacity"), tr("settings.opacity.hint"), opacity, true),
-                setting(p, tr("settings.backdrop"), tr("settings.backdrop.hint"), backdrop_seg, true),
-                setting(p, tr("settings.language"), tr("settings.language.hint"), lang_seg, false),
-            ]
-        )]
+        let import: El = button(tx(tr("settings.skin.import.button"), 13.0, p.txt))
+            .padding([6, 12])
+            .style(theme::outline(p))
+            .on_press(Msg::ImportTheme)
+            .into();
+        column![
+            group(
+                p,
+                tr("settings.group.language"),
+                vec![setting(p, tr("settings.language"), tr("settings.language.hint"), lang_seg, false)],
+            ),
+            group(
+                p,
+                tr("settings.group.themes"),
+                vec![
+                    setting(p, tr("settings.skin"), tr("settings.skin.hint"), skin_pick, true),
+                    setting(p, tr("settings.skin.import"), tr("settings.skin.import.hint"), import, false),
+                ],
+            ),
+            group(
+                p,
+                tr("settings.group.mode"),
+                vec![setting(p, tr("settings.theme"), tr("settings.theme.hint"), theme_seg, false)],
+            ),
+            group(
+                p,
+                tr("settings.group.window"),
+                vec![
+                    setting(p, tr("settings.opacity"), tr("settings.opacity.hint"), opacity, true),
+                    setting(p, tr("settings.backdrop"), tr("settings.backdrop.hint"), backdrop_seg, false),
+                ],
+            ),
+        ]
+        .spacing(12)
         .padding([16, 20])
         .max_width(560)
         .into()

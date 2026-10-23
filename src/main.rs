@@ -755,21 +755,15 @@ impl App {
                     platform::trim_memory();
                     self.trim_after = None;
                 }
-                if self.polling {
-                    return Task::none();
-                }
-                let (Some(e), cur) = (self.engine.clone(), self.current().map(|t| t.id)) else {
-                    return Task::none();
-                };
-                let peers = self.tab == DetailTab::Peers;
-                self.polling = true;
-                return Task::perform(
-                    async move { e.snapshot(cur, peers).await },
-                    Msg::Snap,
-                );
+                return self.poll(false);
             }
             Msg::Frame(_) => {}
-            Msg::Snap(s) => {
+            Msg::Snap(mut s) => {
+                // An older request can finish after a newer one asked for another torrent's details.
+                let cur = self.current().map(|t| t.id);
+                if s.detail.as_ref().map(|d| d.id) != cur && self.snap.detail.as_ref().map(|d| d.id) == cur {
+                    s.detail = self.snap.detail.take();
+                }
                 self.motion.snapshot(&s.torrents);
                 self.notify_completed(&s);
                 self.snap = s;
@@ -784,7 +778,9 @@ impl App {
             }
             Msg::ShowView(v) => self.view = v,
             Msg::Select(id) => {
+                let before = self.current().map(|t| t.id);
                 self.select(id);
+                let poll = if before != self.current().map(|t| t.id) { self.poll(true) } else { Task::none() };
                 let now = std::time::Instant::now();
                 let double = self.last_click.is_some_and(|(last, at)| last == id && now.duration_since(at) < Duration::from_millis(400));
                 if double && !input::ctrl() && !input::shift() {
@@ -795,6 +791,7 @@ impl App {
                 } else {
                     self.last_click = Some((id, now));
                 }
+                return poll;
             }
             Msg::ContextMenu(id) => {
                 if !self.multi.contains(&id) {
@@ -841,7 +838,12 @@ impl App {
                 let hashes: Vec<String> = self.selected_torrents().into_iter().map(|t| t.info_hash).collect();
                 return iced::clipboard::write(hashes.join("\n"));
             }
-            Msg::Tab(t) => self.tab = t,
+            Msg::Tab(t) => {
+                self.tab = t;
+                if t == DetailTab::Peers {
+                    return self.poll(true);
+                }
+            }
             Msg::SettingsTab(t) => self.stab = t,
             Msg::ToggleMenu => self.menu = !self.menu,
             Msg::CloseMenu => self.menu = false,
@@ -1530,6 +1532,21 @@ impl App {
             Some(e) => Task::future(async move { e.shutdown().await }).then(|_| iced::exit()),
             None => iced::exit(),
         }
+    }
+
+    /// Asks the engine for a snapshot. Without `now` it skips the request while one is still running;
+    /// with it (the user just picked another torrent or tab) the details are fetched right away.
+    fn poll(&mut self, now: bool) -> Task<Msg> {
+        if self.polling && !now {
+            return Task::none();
+        }
+        let Some(e) = self.engine.clone() else {
+            return Task::none();
+        };
+        let cur = self.current().map(|t| t.id);
+        let peers = self.tab == DetailTab::Peers;
+        self.polling = true;
+        Task::perform(async move { e.snapshot(cur, peers).await }, Msg::Snap)
     }
 
     fn select(&mut self, id: usize) {
